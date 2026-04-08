@@ -1,0 +1,70 @@
+version: 1
+source: sample.md
+source_hash: sha256:placeholder_will_be_computed
+
+sections:
+  - heading: "Requisitos Funcionais"
+    status: approved
+  - heading: "Edge Cases"
+    status: pending
+
+annotations:
+  - id: a1b2c3
+    selectors:
+      position:
+        startLine: 5
+        startColumn: 11
+        endLine: 5
+        endColumn: 52
+      quote:
+        exact: "O sistema valida todos os inputs do formulário"
+        prefix: "- **RF01:** "
+        suffix: "\n  - ✓ input"
+    comment: "Quais inputs? Precisa especificar campos"
+    tag: question
+    status: open
+    author: Henry
+    created_at: 2026-04-06T12:00:00Z
+    updated_at: 2026-04-06T12:00:00Z
+    replies:
+      - author: Maria
+        comment: "email (string), nome (string min 3), telefone (string opcional)"
+        created_at: 2026-04-06T12:05:00Z
+
+  - id: d4e5f6
+    selectors:
+      position:
+        startLine: 6
+        startColumn: 5
+        endLine: 6
+        endColumn: 39
+      quote:
+        exact: "input de email validado com regex"
+        prefix: "  - ✓ "
+        suffix: "\n  - ✓ input"
+    comment: "Qual regex? RFC 5322 compliant ou simplificado?"
+    tag: question
+    status: open
+    author: Henry
+    created_at: 2026-04-06T12:10:00Z
+    updated_at: 2026-04-06T12:10:00Z
+    replies: []
+
+  - id: g7h8i9
+    selectors:
+      position:
+        startLine: 12
+        startColumn: 5
+        endLine: 12
+        endColumn: 30
+      quote:
+        exact: "mensagem de erro genérica"
+        prefix: "  - ✓ "
+        suffix: "\n  - ✓ campos"
+    comment: "Erro genérico é UX ruim. Sugestão: mensagem específica por campo"
+    tag: suggestion
+    status: resolved
+    author: Maria
+    created_at: 2026-04-06T13:00:00Z
+    updated_at: 2026-04-06T14:00:00Z
+    replies: []

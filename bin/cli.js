@@ -1,0 +1,335 @@
+#!/usr/bin/env node
+
+import { readFileSync, existsSync, statSync } from 'node:fs'
+import { readFile, writeFile, access } from 'node:fs/promises'
+import { join, resolve, extname, basename } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { getConfig, setConfig, getAuthor } from '../src/config.js'
+import { AnnotationFile } from '../src/annotations.js'
+import { exportReport, exportInline, exportJSON, exportSARIF } from '../src/export.js'
+import { createServer as createMdprobeServer } from '../src/server.js'
+import { findMarkdownFiles, extractFlag, hasFlag } from '../src/cli-utils.js'
+
+// ---------------------------------------------------------------------------
+// Resolve paths
+// ---------------------------------------------------------------------------
+const __filename = fileURLToPath(import.meta.url)
+const PROJECT_ROOT = resolve(__filename, '..', '..')
+const PKG_PATH = join(PROJECT_ROOT, 'package.json')
+
+// ---------------------------------------------------------------------------
+// Parse argv
+// ---------------------------------------------------------------------------
+const rawArgs = process.argv.slice(2)
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function printUsage() {
+  console.log(`Usage: mdprobe [files...] [options]
+
+  Markdown viewer + reviewer with live reload and persistent annotations.
+
+Options:
+  --port <n>    Port number (default: 3000)
+  --once        Review mode (single pass, then exit)
+  --help, -h    Show help
+  --version, -v Show version
+
+Subcommands:
+  config [key] [value]   Manage configuration
+  export <path> [flags]  Export annotations (--report, --inline, --json, --sarif)
+  install --plugin       Install Claude Code skill/plugin
+`)
+}
+
+function fatal(msg) {
+  process.stderr.write(msg + '\n')
+  process.exit(1)
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+async function main() {
+  const args = [...rawArgs]
+
+  // --help
+  if (hasFlag(args, '--help', '-h')) {
+    printUsage()
+    process.exit(0)
+  }
+
+  // --version
+  if (hasFlag(args, '--version', '-v')) {
+    try {
+      const pkg = JSON.parse(readFileSync(PKG_PATH, 'utf-8'))
+      console.log(pkg.version)
+    } catch {
+      console.log('unknown')
+    }
+    process.exit(0)
+  }
+
+  // ---- Subcommands ----
+  const subcommand = args[0]
+
+  // ---- config subcommand ----
+  if (subcommand === 'config') {
+    const key = args[1]
+    const value = args[2]
+
+    if (!key) {
+      // Print all config
+      const config = await getConfig()
+      const entries = Object.entries(config)
+      if (entries.length === 0) {
+        console.log('{}')
+      } else {
+        for (const [k, v] of entries) {
+          console.log(`${k}: ${v}`)
+        }
+      }
+      process.exit(0)
+    }
+
+    if (value !== undefined) {
+      // Set config
+      await setConfig(key, value)
+      console.log(`Set ${key} = ${value}`)
+      process.exit(0)
+    }
+
+    // Get single key
+    const config = await getConfig()
+    if (config[key] !== undefined) {
+      console.log(config[key])
+    } else {
+      console.log(`(not set)`)
+    }
+    process.exit(0)
+  }
+
+  // ---- install subcommand ----
+  if (subcommand === 'install') {
+    const target = args[1]
+    if (target === '--plugin') {
+      const os = await import('node:os')
+      const fs = await import('node:fs/promises')
+      const destDir = join(os.homedir(), '.claude', 'skills', 'mdprobe')
+      const srcFile = join(PROJECT_ROOT, 'skills', 'mdprobe', 'SKILL.md')
+
+      try {
+        await fs.mkdir(destDir, { recursive: true })
+        const content = await fs.readFile(srcFile, 'utf-8')
+        await fs.writeFile(join(destDir, 'SKILL.md'), content, 'utf-8')
+        console.log(`Plugin installed to ${destDir}/SKILL.md`)
+        console.log('Claude Code will now suggest mdprobe for rich markdown output.')
+      } catch (err) {
+        fatal(`Error installing plugin: ${err.message}`)
+      }
+    } else {
+      fatal('Usage: mdprobe install --plugin')
+    }
+    process.exit(0)
+  }
+
+  // ---- export subcommand ----
+  if (subcommand === 'export') {
+    const mdPath = args[1]
+
+    if (!mdPath) {
+      fatal('Error: export requires a file path. Usage: mdprobe export <path> [--report|--inline|--json|--sarif]')
+    }
+
+    const resolvedPath = resolve(mdPath)
+
+    // Determine which export format
+    const wantReport = args.includes('--report')
+    const wantInline = args.includes('--inline')
+    const wantJson = args.includes('--json')
+    const wantSarif = args.includes('--sarif')
+
+    // Look for sidecar annotation file
+    const sidecarPath = resolvedPath.replace(/\.md$/, '.annotations.yaml')
+    let af
+
+    try {
+      await access(sidecarPath)
+      af = await AnnotationFile.load(sidecarPath)
+    } catch {
+      fatal(`Error: No annotations found for ${basename(resolvedPath)}. No annotations sidecar file exists.`)
+    }
+
+    // Read source content for inline export
+    let sourceContent = ''
+    try {
+      sourceContent = await readFile(resolvedPath, 'utf-8')
+    } catch {
+      fatal(`Error: Cannot read source file ${resolvedPath}`)
+    }
+
+    if (wantReport) {
+      const report = exportReport(af, sourceContent)
+      const outPath = resolvedPath.replace(/\.md$/, '.review-report.md')
+      await writeFile(outPath, report, 'utf-8')
+      console.log(`Report generated: ${outPath}`)
+    } else if (wantInline) {
+      const inline = exportInline(af, sourceContent)
+      const outPath = resolvedPath.replace(/\.md$/, '.reviewed.md')
+      await writeFile(outPath, inline, 'utf-8')
+      console.log(`Inline export generated: ${outPath}`)
+    } else if (wantJson) {
+      const json = exportJSON(af)
+      const outPath = resolvedPath.replace(/\.md$/, '.annotations.json')
+      await writeFile(outPath, JSON.stringify(json, null, 2), 'utf-8')
+      console.log(`JSON export generated: ${outPath}`)
+    } else if (wantSarif) {
+      const sarif = exportSARIF(af, resolvedPath)
+      const outPath = resolvedPath.replace(/\.md$/, '.annotations.sarif')
+      await writeFile(outPath, JSON.stringify(sarif, null, 2), 'utf-8')
+      console.log(`SARIF export generated: ${outPath}`)
+    } else {
+      fatal('Error: export requires a format flag: --report, --inline, --json, or --sarif')
+    }
+
+    process.exit(0)
+  }
+
+  // ---- Serve mode (default) ----
+
+  // Check if author is configured; prompt if missing
+  let currentAuthor = await getAuthor()
+  if (currentAuthor === 'anonymous') {
+    const { createInterface } = await import('node:readline')
+    const rl = createInterface({ input: process.stdin, output: process.stdout })
+    const name = await new Promise(resolve => {
+      rl.question('Qual seu nome para anotacoes? ', answer => {
+        rl.close()
+        resolve(answer.trim())
+      })
+    })
+    if (name) {
+      await setConfig('author', name)
+      currentAuthor = name
+      console.log(`Author set to: ${name}`)
+    }
+  }
+
+  // Extract flags
+  const portFlag = extractFlag(args, '--port')
+  const onceFlag = hasFlag(args, '--once')
+  const noOpenFlag = hasFlag(args, '--no-open')
+
+  // Validate port
+  let port = 3000
+  if (portFlag !== undefined) {
+    if (portFlag === true) {
+      // --port was provided without a value
+      fatal('Error: --port requires a numeric value')
+    }
+    port = parseInt(portFlag, 10)
+    if (isNaN(port) || port < 0 || port > 65535) {
+      fatal('Error: --port requires a valid numeric value (0-65535)')
+    }
+  }
+
+  // Collect file/directory arguments (anything remaining that isn't a flag)
+  const targets = args.filter((a) => !a.startsWith('-'))
+
+  // Resolve targets to .md files
+  let mdFiles = []
+
+  if (targets.length === 0) {
+    // No arguments: use cwd
+    const cwd = process.cwd()
+    mdFiles = findMarkdownFiles(cwd)
+    if (mdFiles.length === 0) {
+      fatal('Error: No markdown files found in current directory')
+    }
+  } else {
+    for (const target of targets) {
+      const resolved = resolve(target)
+
+      if (!existsSync(resolved)) {
+        fatal(`Error: ${target} does not exist`)
+      }
+
+      const stat = statSync(resolved)
+
+      if (stat.isDirectory()) {
+        const found = findMarkdownFiles(resolved)
+        if (found.length === 0) {
+          fatal(`Error: No markdown files found in ${target}`)
+        }
+        mdFiles.push(...found)
+      } else if (stat.isFile()) {
+        if (extname(resolved).toLowerCase() !== '.md') {
+          fatal(`Error: Not a markdown file: ${target}. Only .md files are supported.`)
+        }
+        mdFiles.push(resolved)
+      }
+    }
+  }
+
+  // Start the mdprobe server (HTTP + WebSocket + file watcher + Preact UI)
+  try {
+    const server = await createMdprobeServer({
+      files: mdFiles,
+      port,
+      open: false,
+      once: onceFlag,
+      author: currentAuthor,
+    })
+
+    console.log(`Server listening at ${server.url}`)
+
+    if (onceFlag) {
+      console.log(`Review mode: ${mdFiles.length} file(s)`)
+      mdFiles.forEach(f => console.log(`  - ${basename(f)}`))
+
+      // Block until user clicks "Finish Review" in the UI
+      const result = await server.finishPromise
+      console.log('\nReview complete.')
+      if (result.yamlPaths?.length > 0) {
+        result.yamlPaths.forEach(p => console.log(p))
+      } else {
+        console.log('No annotations created.')
+      }
+      await server.close()
+      process.exit(0)
+    }
+
+    // Try to open browser (skip with --no-open)
+    if (noOpenFlag) { /* skip */ } else try {
+      const { execFile: execFileFn } = await import('node:child_process')
+      const isWSL = await readFile('/proc/version', 'utf-8').then(v => /microsoft/i.test(v)).catch(() => false)
+
+      let cmd, args
+      if (process.platform === 'darwin') {
+        cmd = 'open'
+        args = [server.url]
+      } else if (process.platform === 'win32') {
+        cmd = 'cmd'
+        args = ['/c', 'start', server.url]
+      } else if (isWSL) {
+        cmd = '/mnt/c/Windows/System32/cmd.exe'
+        args = ['/c', 'start', server.url]
+      } else {
+        cmd = 'xdg-open'
+        args = [server.url]
+      }
+      execFileFn(cmd, args, { stdio: 'ignore' })
+    } catch {
+      // Browser open failed — user can navigate manually
+    }
+  } catch (err) {
+    fatal(`Error: ${err.message}`)
+  }
+}
+
+main().catch((err) => {
+  fatal(`Error: ${err.message}`)
+})

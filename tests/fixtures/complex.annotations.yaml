@@ -1,0 +1,91 @@
+version: 1
+source: complex.md
+source_hash: sha256:492c35fdb16dcf91c22d0d1a19970a3ef1bda2612fffb6816efac1e201f6dbf4
+sections:
+  - heading: Complex Markdown Test
+    level: 1
+    status: pending
+  - heading: GFM Features
+    level: 2
+    status: pending
+  - heading: Tables
+    level: 3
+    status: pending
+  - heading: Task Lists
+    level: 3
+    status: pending
+  - heading: Strikethrough
+    level: 3
+    status: pending
+  - heading: Autolinks
+    level: 3
+    status: pending
+  - heading: Code Blocks
+    level: 2
+    status: pending
+  - heading: JavaScript
+    level: 3
+    status: pending
+  - heading: Python
+    level: 3
+    status: pending
+  - heading: Mermaid Diagrams
+    level: 2
+    status: pending
+  - heading: Math / KaTeX
+    level: 2
+    status: pending
+  - heading: HTML Passthrough
+    level: 2
+    status: pending
+  - heading: Images
+    level: 2
+    status: pending
+  - heading: Mixed Content
+    level: 2
+    status: pending
+  - heading: Unicode & Emoji
+    level: 2
+    status: pending
+annotations:
+  - id: e42e8d8d
+    selectors:
+      position:
+        startLine: 45
+        startColumn: 1
+        endLine: 45
+        endColumn: 1
+      quote:
+        exact: |-
+          Hello, {name}!")
+              return {"greeting": f
+        prefix: ''
+        suffix: ''
+    comment: sdfgsd
+    tag: question
+    status: open
+    author: anonymous
+    created_at: '2026-04-08T11:46:42.790Z'
+    updated_at: '2026-04-08T11:46:42.790Z'
+    replies: []
+  - id: 0af5d9b3
+    selectors:
+      position:
+        startLine: 20
+        startColumn: 1
+        endLine: 22
+        endColumn: 1
+      quote:
+        exact: |-
+          nted tables
+           Implemented task lists
+           Implement strikethr
+        prefix: ''
+        suffix: ''
+    comment: ghfdghfd
+    tag: question
+    status: open
+    author: anonymous
+    created_at: '2026-04-08T14:07:43.724Z'
+    updated_at: '2026-04-08T14:07:43.724Z'
+    replies: []

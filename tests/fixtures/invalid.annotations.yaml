@@ -1,0 +1,13 @@
+version: 1
+source: sample.md
+annotations:
+  - id: broken1
+    selectors:
+      position:
+        startLine: not_a_number
+    comment: "This annotation has invalid position type"
+    tag: invalid_tag
+    status: open
+  - id: broken2
+    comment "missing colon here will cause parse error
+    tag: bug

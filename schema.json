@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "mdprobe annotation sidecar",
+  "description": "Schema for YAML sidecar annotation files used by mdprobe",
+  "type": "object",
+  "required": ["version", "source", "source_hash", "annotations"],
+  "properties": {
+    "version": {
+      "type": "integer"
+    },
+    "source": {
+      "type": "string"
+    },
+    "source_hash": {
+      "type": "string"
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/section"
+      }
+    },
+    "annotations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/annotation"
+      }
+    }
+  },
+  "definitions": {
+    "position": {
+      "type": "object",
+      "required": ["startLine", "startColumn", "endLine", "endColumn"],
+      "properties": {
+        "startLine": { "type": "integer" },
+        "startColumn": { "type": "integer" },
+        "endLine": { "type": "integer" },
+        "endColumn": { "type": "integer" }
+      }
+    },
+    "quote": {
+      "type": "object",
+      "required": ["exact", "prefix", "suffix"],
+      "properties": {
+        "exact": { "type": "string" },
+        "prefix": { "type": "string" },
+        "suffix": { "type": "string" }
+      }
+    },
+    "selectors": {
+      "type": "object",
+      "required": ["position", "quote"],
+      "properties": {
+        "position": { "$ref": "#/definitions/position" },
+        "quote": { "$ref": "#/definitions/quote" }
+      }
+    },
+    "reply": {
+      "type": "object",
+      "required": ["author", "comment", "created_at"],
+      "properties": {
+        "author": { "type": "string" },
+        "comment": { "type": "string" },
+        "created_at": { "type": "string" }
+      }
+    },
+    "annotation": {
+      "type": "object",
+      "required": ["id", "selectors", "comment", "tag", "status", "author", "created_at", "updated_at", "replies"],
+      "properties": {
+        "id": { "type": "string" },
+        "selectors": { "$ref": "#/definitions/selectors" },
+        "comment": { "type": "string" },
+        "tag": {
+          "type": "string",
+          "enum": ["bug", "question", "suggestion", "nitpick"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["open", "resolved"]
+        },
+        "author": { "type": "string" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "replies": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/reply" }
+        }
+      }
+    },
+    "section": {
+      "type": "object",
+      "required": ["heading", "status"],
+      "properties": {
+        "heading": { "type": "string" },
+        "level": { "type": "integer", "minimum": 1, "maximum": 6 },
+        "status": {
+          "type": "string",
+          "enum": ["approved", "rejected", "pending"]
+        }
+      }
+    }
+  }
+}

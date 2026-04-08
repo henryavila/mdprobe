@@ -1,0 +1,26 @@
+node_modules/
+dist/
+coverage/
+*.tgz
+
+# OS
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+
+# Playwright MCP
+.playwright-mcp/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test artifacts
+tests/tmp/
+*.annotations.yaml
+!tests/fixtures/*.annotations.yaml
+
+# Build
+src/ui-dist/
