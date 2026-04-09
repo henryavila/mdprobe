@@ -403,7 +403,7 @@ export class AnnotationFile {
         {
           tool: {
             driver: {
-              name: 'mdprobe',
+              name: 'mdProbe',
               version: '0.1.0',
               informationUri: 'https://github.com/henryavila/mdprobe',
             },

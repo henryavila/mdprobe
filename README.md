@@ -1,6 +1,6 @@
-![mdprobe](header.png)
+![mdProbe](header.png)
 
-# mdprobe
+# mdProbe
 
 Markdown viewer and reviewer with live reload, persistent annotations, and AI agent integration.
 
@@ -8,14 +8,14 @@ Open `.md` files in the browser, annotate inline, approve sections, and export s
 
 ---
 
-## What mdprobe is
+## What mdProbe is
 
 - A **CLI tool** that renders markdown in the browser with live reload
 - An **annotation system** where you select text and add tagged comments (bug, question, suggestion, nitpick)
 - A **review workflow** with section-level approval (approve/reject per heading)
 - An **MCP server** that lets AI agents (Claude Code, Cursor, etc.) open files, read annotations, and resolve feedback programmatically
 
-## What mdprobe is not
+## What mdProbe is not
 
 - Not a markdown editor — you edit in your own editor, mdprobe renders and annotates
 - Not a static site generator — it runs a local server for live preview
@@ -46,29 +46,19 @@ npx @henryavila/mdprobe README.md
 
 ## Quick Start
 
-### View a file
+### View and edit
 
 ```bash
 mdprobe README.md
 ```
 
-Opens rendered markdown in the browser. Edit the source file — the browser updates instantly.
-
-### View a directory
+Opens rendered markdown in the browser. Edit the source file — the browser updates instantly via WebSocket.
 
 ```bash
 mdprobe docs/
 ```
 
 Discovers all `.md` files recursively and shows a file picker.
-
-### Review mode
-
-```bash
-mdprobe spec.md --once
-```
-
-Blocks until you click "Finish Review" in the UI. Annotations are saved to `spec.annotations.yaml`. Useful for CI/CD or scripts that need human feedback before continuing.
 
 ### Annotate
 
@@ -82,6 +72,65 @@ Select any text in the browser → choose a tag → write a comment → save.
 | `nitpick` | Minor style/wording |
 
 Annotations are stored in `.annotations.yaml` sidecar files — human-readable, git-friendly.
+
+---
+
+## Singleton Server
+
+mdProbe runs a **single server instance**. Multiple invocations share the same server instead of starting duplicates:
+
+```bash
+mdprobe README.md          # Starts server on port 3000, opens browser
+mdprobe CHANGELOG.md       # Detects running server, adds file, opens browser, exits
+```
+
+The second invocation adds its files to the existing server and exits immediately. The browser shows all files in the sidebar.
+
+**How it works:** A lock file at `/tmp/mdprobe.lock` records the running server's PID, port, and URL. New invocations read the lock file, verify the server is alive via HTTP health check, and join via `POST /api/add-files`. On shutdown (`Ctrl+C`), the lock file is removed automatically.
+
+**Stale lock recovery:** If a previous instance crashed, the next invocation detects the dead process and starts fresh.
+
+---
+
+## Two Review Workflows
+
+mdProbe supports two distinct review workflows for different contexts:
+
+### 1. Blocking review (`--once`) — for CI/CD and scripts
+
+```bash
+mdprobe spec.md --once
+```
+
+Blocks the process until you click **"Finish Review"** in the UI. When you finish, annotations are saved to `spec.annotations.yaml` and the process exits with the list of created files. This is useful for pipelines that need human sign-off before continuing.
+
+`--once` mode always creates an **isolated server instance** — it does not participate in the singleton. This ensures review sessions have independent lifecycle.
+
+### 2. AI-assisted review (MCP) — for AI coding agents
+
+When working with AI agents (Claude Code, Cursor, etc.), the workflow is different. The agent does **not** use `--once`. Instead:
+
+```
+Agent writes spec.md
+    ↓
+Agent calls mdprobe_view → browser opens, server stays running
+    ↓
+Human reads, annotates, approves/rejects sections
+    ↓
+Human tells agent via chat: "done reviewing"
+    ↓
+Agent calls mdprobe_annotations → reads all feedback
+    ↓
+Agent fixes bugs, answers questions, evaluates suggestions
+    ↓
+Agent reports changes, asks human to confirm
+    ↓
+Agent calls mdprobe_update → resolves annotations
+    ↓
+Human sees resolved items in real-time (greyed out)
+```
+
+The server stays running across the entire conversation. The agent reads annotations on demand — no blocking, no process exit. Multiple files can be reviewed in the same session via the singleton server.
 
 ---
 
@@ -131,7 +180,7 @@ mdprobe export spec.md --sarif    # SARIF 2.1.0 (CI/CD integration)
 
 ## AI Agent Integration
 
-mdprobe includes an MCP (Model Context Protocol) server and a skill file for AI agents. This enables a two-way review loop: the agent writes markdown, the human annotates, the agent reads feedback and resolves it.
+mdProbe includes an MCP (Model Context Protocol) server and a skill file (`SKILL.md`) that teaches AI agents how to use the review workflow. This enables a two-way loop: the agent writes markdown, the human annotates, the agent reads feedback and resolves it.
 
 ### Setup
 
@@ -159,27 +208,7 @@ Once set up, AI agents can call these tools:
 | `mdprobe_update` | Resolve, reply, add, or delete annotations |
 | `mdprobe_status` | Check if the server is running |
 
-### Agent Review Workflow
-
-```
-Agent writes spec.md
-    ↓
-Agent calls mdprobe_view → browser opens automatically
-    ↓
-Human reads, annotates, approves/rejects sections
-    ↓
-Human tells agent: "done reviewing"
-    ↓
-Agent calls mdprobe_annotations → reads all feedback
-    ↓
-Agent fixes bugs, answers questions, evaluates suggestions
-    ↓
-Agent reports changes, asks human to confirm
-    ↓
-Agent calls mdprobe_update → resolves annotations
-    ↓
-Human sees resolved items in real-time (greyed out)
-```
+The MCP server participates in the singleton — if a CLI-started server is already running, the agent reuses it.
 
 ### Manual MCP Registration
 
@@ -198,7 +227,7 @@ mdprobe [files...] [options]
 
 Options:
   --port <n>      Port number (default: 3000, auto-increments if busy)
-  --once          Review mode — blocks until human finishes
+  --once          Blocking review — isolated server, exits on "Finish Review"
   --no-open       Don't auto-open browser
   --help, -h      Show help
   --version, -v   Show version
@@ -312,6 +341,8 @@ Available when the server is running:
 | `POST` | `/api/annotations` | Create/update/delete annotations |
 | `POST` | `/api/sections` | Approve/reject/reset sections |
 | `GET` | `/api/export?path=<file>&format=<fmt>` | Export (json, report, inline, sarif) |
+| `GET` | `/api/status` | Server identity, PID, port, file list |
+| `POST` | `/api/add-files` | Add files to a running server (singleton join) |
 
 WebSocket at `/ws` for real-time updates.
 
@@ -333,6 +364,7 @@ npm test
 bin/cli.js              CLI entry point
 src/
   server.js             HTTP + WebSocket server
+  singleton.js          Lock file + cross-process singleton coordination
   mcp.js                MCP server (4 tools, stdio transport)
   renderer.js           Markdown → HTML (unified/remark/rehype)
   annotations.js        Annotation CRUD + section approval

@@ -42,7 +42,7 @@ export function useWebSocket() {
       try {
         msg = JSON.parse(event.data)
       } catch {
-        console.warn('mdprobe: received non-JSON WebSocket message')
+        console.warn('mdProbe: received non-JSON WebSocket message')
         return
       }
 
@@ -88,13 +88,13 @@ export function useWebSocket() {
 
         case 'error':
           // Keep last valid render; surface the warning in the console
-          console.warn('mdprobe:', msg.message)
+          console.warn('mdProbe:', msg.message)
           break
       }
     }
 
     ws.onerror = (err) => {
-      console.warn('mdprobe: WebSocket error', err)
+      console.warn('mdProbe: WebSocket error', err)
     }
 
     ws.onclose = () => {

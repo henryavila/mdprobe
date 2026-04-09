@@ -29,7 +29,7 @@ export async function runSetup(args) {
 
   if (isRemove) {
     const s = spinner()
-    s.start('Removendo mdprobe...')
+    s.start('Removendo mdProbe...')
     const removed = await removeAll()
     s.stop(`Removido: ${removed.length > 0 ? removed.join(', ') : 'nada encontrado'}`)
     return
@@ -57,7 +57,7 @@ export async function runSetup(args) {
   }
 
   // Interactive mode
-  intro(`mdprobe v${pkg.version} — setup`)
+  intro(`mdProbe v${pkg.version} — setup`)
 
   const author = bail(await text({
     message: 'Seu nome para anotacoes:',

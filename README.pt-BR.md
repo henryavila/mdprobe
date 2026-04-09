@@ -1,6 +1,6 @@
-![mdprobe](header.png)
+![mdProbe](header.png)
 
-# mdprobe
+# mdProbe
 
 Visualizador e revisor de markdown com live reload, anotações persistentes e integração com agentes de IA.
 
@@ -8,14 +8,14 @@ Abra arquivos `.md` no browser, anote inline, aprove seções e exporte feedback
 
 ---
 
-## O que o mdprobe é
+## O que o mdProbe é
 
 - Uma **ferramenta CLI** que renderiza markdown no browser com live reload
 - Um **sistema de anotações** onde você seleciona texto e adiciona comentários com tags (bug, question, suggestion, nitpick)
 - Um **workflow de revisão** com aprovação por seção (aprovar/rejeitar por heading)
 - Um **servidor MCP** que permite agentes de IA (Claude Code, Cursor, etc.) abrir arquivos, ler anotações e resolver feedback programaticamente
 
-## O que o mdprobe não é
+## O que o mdProbe não é
 
 - Não é um editor de markdown — você edita no seu editor, o mdprobe renderiza e anota
 - Não é um gerador de sites estáticos — ele roda um servidor local para preview ao vivo
@@ -46,29 +46,19 @@ npx @henryavila/mdprobe README.md
 
 ## Início Rápido
 
-### Visualizar um arquivo
+### Visualizar e editar
 
 ```bash
 mdprobe README.md
 ```
 
-Abre o markdown renderizado no browser. Edite o arquivo fonte — o browser atualiza instantaneamente.
-
-### Visualizar um diretório
+Abre o markdown renderizado no browser. Edite o arquivo fonte — o browser atualiza instantaneamente via WebSocket.
 
 ```bash
 mdprobe docs/
 ```
 
 Descobre todos os `.md` recursivamente e mostra um seletor de arquivos.
-
-### Modo revisão
-
-```bash
-mdprobe spec.md --once
-```
-
-Bloqueia até você clicar "Finish Review" na UI. Anotações são salvas em `spec.annotations.yaml`. Útil para CI/CD ou scripts que precisam de feedback humano antes de continuar.
 
 ### Anotar
 
@@ -82,6 +72,65 @@ Selecione qualquer texto no browser → escolha uma tag → escreva um comentár
 | `nitpick` | Detalhe menor de estilo/texto |
 
 Anotações são armazenadas em arquivos sidecar `.annotations.yaml` — legíveis por humanos, amigáveis para git.
+
+---
+
+## Servidor Singleton
+
+O mdProbe roda uma **única instância do servidor**. Múltiplas invocações compartilham o mesmo servidor ao invés de iniciar duplicatas:
+
+```bash
+mdprobe README.md          # Inicia servidor na porta 3000, abre browser
+mdprobe CHANGELOG.md       # Detecta servidor rodando, adiciona arquivo, abre browser, sai
+```
+
+A segunda invocação adiciona seus arquivos ao servidor existente e sai imediatamente. O browser mostra todos os arquivos na sidebar.
+
+**Como funciona:** Um lock file em `/tmp/mdprobe.lock` registra o PID, porta e URL do servidor rodando. Novas invocações leem o lock file, verificam se o servidor está vivo via health check HTTP, e entram via `POST /api/add-files`. Ao desligar (`Ctrl+C`), o lock file é removido automaticamente.
+
+**Recuperação de lock stale:** Se uma instância anterior crashou, a próxima invocação detecta o processo morto e inicia normalmente.
+
+---
+
+## Dois Workflows de Revisão
+
+O mdProbe suporta dois workflows de revisão distintos para contextos diferentes:
+
+### 1. Revisão bloqueante (`--once`) — para CI/CD e scripts
+
+```bash
+mdprobe spec.md --once
+```
+
+Bloqueia o processo até você clicar **"Finish Review"** na UI. Ao finalizar, as anotações são salvas em `spec.annotations.yaml` e o processo sai com a lista de arquivos criados. Útil para pipelines que precisam de aprovação humana antes de continuar.
+
+O modo `--once` sempre cria uma **instância isolada** — não participa do singleton. Isso garante que sessões de revisão tenham ciclo de vida independente.
+
+### 2. Revisão assistida por IA (MCP) — para agentes de código
+
+Ao trabalhar com agentes de IA (Claude Code, Cursor, etc.), o workflow é diferente. O agente **não usa `--once`**. Em vez disso:
+
+```
+Agente escreve spec.md
+    ↓
+Agente chama mdprobe_view → browser abre, servidor continua rodando
+    ↓
+Humano lê, anota, aprova/rejeita seções
+    ↓
+Humano diz ao agente via chat: "terminei de revisar"
+    ↓
+Agente chama mdprobe_annotations → lê todo o feedback
+    ↓
+Agente corrige bugs, responde perguntas, avalia sugestões
+    ↓
+Agente reporta mudanças, pede confirmação
+    ↓
+Agente chama mdprobe_update → resolve anotações
+    ↓
+Humano vê itens resolvidos em tempo real (esmaecidos)
+```
+
+O servidor continua rodando durante toda a conversa. O agente lê anotações sob demanda — sem bloqueio, sem sair do processo. Múltiplos arquivos podem ser revisados na mesma sessão via servidor singleton.
 
 ---
 
@@ -131,7 +180,7 @@ mdprobe export spec.md --sarif    # SARIF 2.1.0 (integração CI/CD)
 
 ## Integração com Agentes de IA
 
-O mdprobe inclui um servidor MCP (Model Context Protocol) e um arquivo de skill para agentes de IA. Isso habilita um loop de revisão bidirecional: o agente escreve markdown, o humano anota, o agente lê o feedback e resolve.
+O mdProbe inclui um servidor MCP (Model Context Protocol) e um arquivo de skill (`SKILL.md`) que ensina agentes de IA a usar o workflow de revisão. Isso habilita um loop bidirecional: o agente escreve markdown, o humano anota, o agente lê o feedback e resolve.
 
 ### Setup
 
@@ -159,27 +208,7 @@ Após o setup, agentes de IA podem chamar estas ferramentas:
 | `mdprobe_update` | Resolver, responder, adicionar ou deletar anotações |
 | `mdprobe_status` | Verificar se o servidor está rodando |
 
-### Workflow de Revisão com Agente
-
-```
-Agente escreve spec.md
-    ↓
-Agente chama mdprobe_view → browser abre automaticamente
-    ↓
-Humano lê, anota, aprova/rejeita seções
-    ↓
-Humano diz ao agente: "terminei de revisar"
-    ↓
-Agente chama mdprobe_annotations → lê todo o feedback
-    ↓
-Agente corrige bugs, responde perguntas, avalia sugestões
-    ↓
-Agente reporta mudanças, pede confirmação
-    ↓
-Agente chama mdprobe_update → resolve anotações
-    ↓
-Humano vê itens resolvidos em tempo real (esmaecidos)
-```
+O servidor MCP participa do singleton — se um servidor iniciado via CLI já estiver rodando, o agente o reutiliza.
 
 ### Registro Manual do MCP
 
@@ -198,7 +227,7 @@ mdprobe [arquivos...] [opções]
 
 Opções:
   --port <n>      Porta (padrão: 3000, auto-incrementa se ocupada)
-  --once          Modo revisão — bloqueia até o humano finalizar
+  --once          Revisão bloqueante — servidor isolado, sai ao "Finish Review"
   --no-open       Não abrir browser automaticamente
   --help, -h      Mostrar ajuda
   --version, -v   Mostrar versão
@@ -312,6 +341,8 @@ Disponível quando o servidor está rodando:
 | `POST` | `/api/annotations` | Criar/atualizar/deletar anotações |
 | `POST` | `/api/sections` | Aprovar/rejeitar/resetar seções |
 | `GET` | `/api/export?path=<arquivo>&format=<fmt>` | Exportar (json, report, inline, sarif) |
+| `GET` | `/api/status` | Identidade do servidor, PID, porta, lista de arquivos |
+| `POST` | `/api/add-files` | Adicionar arquivos a servidor rodando (singleton join) |
 
 WebSocket em `/ws` para atualizações em tempo real.
 
@@ -333,6 +364,7 @@ npm test
 bin/cli.js              Entry point da CLI
 src/
   server.js             Servidor HTTP + WebSocket
+  singleton.js          Lock file + coordenação singleton cross-process
   mcp.js                Servidor MCP (4 tools, transporte stdio)
   renderer.js           Markdown → HTML (unified/remark/rehype)
   annotations.js        CRUD de anotações + aprovação de seções
