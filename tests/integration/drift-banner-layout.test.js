@@ -98,7 +98,7 @@ describe('Drift banner layout (integration)', () => {
     // Step 4: Verify drift is detected via API
     const annRes = await httpRequest(`${server.url}/api/annotations?path=spec.md`)
     const annData = annRes.json()
-    expect(annData.drift).toBe(true)
+    expect(annData.drift).toBeTruthy()
 
     // Step 5: Verify CSS served by the server handles drift banner
     // Fetch the HTML shell to find the CSS asset path
@@ -132,6 +132,77 @@ describe('Drift banner layout (integration)', () => {
     expect(driftRow).toBeTruthy()
     expect(contentRow).toBeTruthy()
     expect(Number(contentRow[1])).toBeGreaterThan(Number(driftRow[1]))
+  })
+
+  it('drift response includes anchorStatus with orphan when annotated text is deleted', async () => {
+    const mdPath = await writeFixture('orphan.md', '# Orphan Test\n\nThis exact text will be annotated.\n\nAnother paragraph.\n')
+    const server = track(await createServer({
+      files: [mdPath],
+      port: 5210,
+      open: false,
+    }))
+
+    const addRes = await httpRequest(`${server.url}/api/annotations`, 'POST', {
+      file: 'orphan.md',
+      action: 'add',
+      data: {
+        selectors: {
+          position: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 40 },
+          quote: { exact: 'This exact text will be annotated.', prefix: '', suffix: '' },
+        },
+        comment: 'Test',
+        tag: 'bug',
+        author: 'Tester',
+      },
+    })
+    expect(addRes.status).toBe(200)
+    const annotationId = addRes.json().annotations[0].id
+
+    await node_fs.writeFile(mdPath, '# Orphan Test\n\nCompletely different content now.\n\nAnother paragraph.\n', 'utf-8')
+    await new Promise(r => setTimeout(r, 300))
+
+    const annRes = await httpRequest(`${server.url}/api/annotations?path=orphan.md`)
+    const data = annRes.json()
+
+    expect(data.drift).toBeTruthy()
+    expect(typeof data.drift).toBe('object')
+    expect(data.drift.anchorStatus).toBeDefined()
+    expect(data.drift.anchorStatus[annotationId]).toBe('orphan')
+  })
+
+  it('drift response shows anchored status when text is moved but still present', async () => {
+    const mdPath = await writeFixture('moved.md', '# Moved Test\n\nOriginal text here.\n')
+    const server = track(await createServer({
+      files: [mdPath],
+      port: 5211,
+      open: false,
+    }))
+
+    const addRes = await httpRequest(`${server.url}/api/annotations`, 'POST', {
+      file: 'moved.md',
+      action: 'add',
+      data: {
+        selectors: {
+          position: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 20 },
+          quote: { exact: 'Original text here.', prefix: '', suffix: '' },
+        },
+        comment: 'Test',
+        tag: 'question',
+        author: 'Tester',
+      },
+    })
+    expect(addRes.status).toBe(200)
+    const annotationId = addRes.json().annotations[0].id
+
+    await node_fs.writeFile(mdPath, '# Moved Test\n\nNew line 1.\n\nNew line 2.\n\nOriginal text here.\n', 'utf-8')
+    await new Promise(r => setTimeout(r, 300))
+
+    const annRes = await httpRequest(`${server.url}/api/annotations?path=moved.md`)
+    const data = annRes.json()
+
+    expect(data.drift).toBeTruthy()
+    expect(typeof data.drift).toBe('object')
+    expect(data.drift.anchorStatus[annotationId]).toBe('anchored')
   })
 
   it('layout is correct when there is no drift (no banner in DOM)', async () => {

@@ -8,6 +8,7 @@ import { watch } from 'chokidar'
 import { render } from './renderer.js'
 import { AnnotationFile, computeSectionStatus } from './annotations.js'
 import { detectDrift } from './hash.js'
+import { reanchorAll } from './anchoring.js'
 
 // ---------------------------------------------------------------------------
 // File resolution
@@ -528,10 +529,18 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
           const af = await AnnotationFile.load(sidecarPath)
           json = af.toJSON()
           savedSections = json.sections || []
-          // Check for drift
+          // Check for drift and re-anchor annotations
           try {
             const drift = await detectDrift(sidecarPath, match)
-            if (drift.drifted) json.drift = true
+            if (drift.drifted) {
+              const content = await node_fs.readFile(match, 'utf8')
+              const anchorResults = reanchorAll(json.annotations, content)
+              json.drift = {
+                anchorStatus: Object.fromEntries(
+                  [...anchorResults].map(([id, r]) => [id, r.status === 'orphan' ? 'orphan' : 'anchored'])
+                )
+              }
+            }
           } catch { /* no drift info available */ }
         } catch {
           // No sidecar or unreadable
