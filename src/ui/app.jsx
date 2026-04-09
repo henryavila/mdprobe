@@ -82,7 +82,7 @@ function App() {
     <>
       {/* Header */}
       <header class="header">
-        <h1>mdprobe</h1>
+        <h1>mdProbe</h1>
         <span class="header-file">{currentFile.value || 'No file selected'}</span>
         <div style="flex: 1" />
         {sectionStats.value.total > 0 && (reviewMode.value || sectionStats.value.reviewed > 0) && (

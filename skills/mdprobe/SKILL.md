@@ -1,11 +1,11 @@
 ---
-name: mdprobe
+name: mdProbe
 description: Render and review markdown files in the browser. Use whenever
   generating, editing, or referencing any .md file. Opens a live preview
   with annotations, section approval, and structured feedback via YAML sidecars.
 ---
 
-# mdprobe — Markdown Reviewer (MCP)
+# mdProbe — Markdown Reviewer (MCP)
 
 ## When to Use
 
