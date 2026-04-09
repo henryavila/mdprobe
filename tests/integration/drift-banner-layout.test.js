@@ -277,4 +277,51 @@ describe('Drift banner layout (integration)', () => {
     // 4 rows: 48px auto 1fr 32px — the auto row collapses when banner absent
     expect(rowTracks).toEqual(['48px', 'auto', '1fr', '32px'])
   })
+
+  it('no drift field when file has no annotations', async () => {
+    const mdPath = await writeFixture('nodrift.md', '# No Drift\n\nClean file.\n')
+    const server = track(await createServer({
+      files: [mdPath],
+      port: 5213,
+      open: false,
+    }))
+
+    const res = await httpRequest(`${server.url}/api/annotations?path=nodrift.md`)
+    const data = res.json()
+
+    expect(data.drift).toBeFalsy()
+  })
+
+  it('drift object is truthy for backward compatibility', async () => {
+    const mdPath = await writeFixture('compat.md', '# Compat\n\nSome text.\n')
+    const server = track(await createServer({
+      files: [mdPath],
+      port: 5214,
+      open: false,
+    }))
+
+    await httpRequest(`${server.url}/api/annotations`, 'POST', {
+      file: 'compat.md',
+      action: 'add',
+      data: {
+        selectors: {
+          position: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 10 },
+          quote: { exact: 'Some text.', prefix: '', suffix: '' },
+        },
+        comment: 'Test',
+        tag: 'bug',
+        author: 'Tester',
+      },
+    })
+
+    await node_fs.writeFile(mdPath, '# Compat\n\nChanged.\n', 'utf-8')
+    await new Promise(r => setTimeout(r, 300))
+
+    const res = await httpRequest(`${server.url}/api/annotations?path=compat.md`)
+    const data = res.json()
+
+    // Object is truthy — backward compatible with `if (data.drift)`
+    expect(data.drift).toBeTruthy()
+    expect(typeof data.drift).toBe('object')
+  })
 })
