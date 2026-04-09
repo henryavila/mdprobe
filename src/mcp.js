@@ -8,13 +8,35 @@ import { openBrowser } from './open-browser.js'
 import { AnnotationFile } from './annotations.js'
 import { getConfig } from './config.js'
 import { hashContent } from './hash.js'
+import { discoverExistingServer, joinExistingServer, writeLockFile } from './singleton.js'
 
-// Fix #1: Use a Promise to prevent race conditions in concurrent calls
 let httpServerPromise = null
 
 async function getOrCreateServer(port = 3000) {
   if (!httpServerPromise) {
-    httpServerPromise = createServer({ files: [], port, open: false })
+    // Check for cross-process singleton (e.g. CLI already running)
+    const existing = await discoverExistingServer()
+    if (existing) {
+      httpServerPromise = Promise.resolve({
+        url: existing.url,
+        port: existing.port,
+        addFiles: (paths) => joinExistingServer(existing.url, paths),
+        getFiles: () => [],
+        broadcast: () => {},
+        close: async () => {},
+        _remote: true,
+      })
+    } else {
+      httpServerPromise = createServer({ files: [], port, open: false }).then(async (srv) => {
+        await writeLockFile({
+          pid: process.pid,
+          port: srv.port,
+          url: srv.url,
+          startedAt: new Date().toISOString(),
+        })
+        return srv
+      })
+    }
   }
   return httpServerPromise
 }
@@ -31,7 +53,7 @@ export async function startMcpServer() {
   const urlStyle = config.urlStyle || 'localhost'
 
   const server = new McpServer({
-    name: 'mdprobe',
+    name: 'mdProbe',
     version: '0.2.0',
   })
 

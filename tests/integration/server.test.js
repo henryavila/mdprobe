@@ -195,15 +195,16 @@ describe('Server Lifecycle', () => {
 // RF03 — Port Management
 // ---------------------------------------------------------------------------
 describe('Port Management', () => {
-  it('TC-RF03-1: default port is 3000', async () => {
+  it('TC-RF03-1: default port starts from 3000 (auto-increments if busy)', async () => {
     const specPath = await writeFixture('spec.md', '# Spec\n')
     const server = track(await createServer({
       files: [specPath],
       open: false,
     }))
 
-    expect(server.port).toBe(3000)
-    expect(server.url).toBe('http://127.0.0.1:3000')
+    expect(server.port).toBeGreaterThanOrEqual(3000)
+    expect(server.port).toBeLessThanOrEqual(3009)
+    expect(server.url).toBe(`http://127.0.0.1:${server.port}`)
   })
 
   it('custom port via options', async () => {
