@@ -1,16 +1,17 @@
 ---
 name: mdProbe
-description: Render and review markdown files in the browser. Use whenever
-  generating, editing, or referencing any .md file. Opens a live preview
-  with annotations, section approval, and structured feedback via YAML sidecars.
+description: Human review tool for any content >20 lines. BEFORE asking for
+  feedback on findings, specs, plans, analysis, or any long output, save to
+  file and open with mdprobe_view. Renders markdown with annotations, section
+  approval, and structured feedback via YAML sidecars.
 ---
 
 # mdProbe — Markdown Reviewer (MCP)
 
 ## When to Use
 
-- Generating, editing, or referencing any `.md` file
-- Output longer than 40 lines (specs, RFCs, ADRs, design docs)
+- ANY content >20 lines that needs human review (findings, specs, plans, analysis, validation lists)
+- Generating, editing, or referencing `.md` files
 - Tables, Mermaid diagrams, math/LaTeX, syntax-highlighted code
 - Human needs to **review and annotate** before you proceed
 - You need **section-level approval** (approved/rejected per heading)
@@ -21,13 +22,30 @@ description: Render and review markdown files in the browser. Use whenever
 - Simple text responses with no markdown files involved
 - Interactive debugging sessions
 
+## Anti-pattern: Inline Review
+
+**NEVER present content >20 lines inline in conversation for human review.**
+
+This includes specs, findings, plans, analysis, validation lists — any long output
+that the human needs to read and evaluate. Terminal scrolling is bad UX: no annotations,
+no section approval, no rendered tables/diagrams.
+
+**Decision rule:**
+- Content >20 lines AND purpose is review/feedback?
+  → Format as markdown → `mdprobe_view({ content, filename })` → wait for feedback
+- Content <20 lines OR purely informational (no review needed)?
+  → Show inline in conversation
+
+If you catch yourself pasting a long code block, spec, or findings list in the
+conversation and asking "what do you think?" — STOP. Save it to a file and use mdProbe.
+
 ---
 
 ## MCP Tools
 
 | Tool | Input | Output | Purpose |
 |------|-------|--------|---------|
-| `mdprobe_view` | `{ paths, open? }` | `{ url, files }` | Open files in browser for viewing or review |
+| `mdprobe_view` | `{ paths?, content?, filename?, open? }` | `{ url, files, savedTo? }` | Open content in browser for human review |
 | `mdprobe_annotations` | `{ path }` | `{ source, sections, annotations, summary }` | Read annotations after human review |
 | `mdprobe_update` | `{ path, actions[] }` | `{ updated, annotations, summary }` | Resolve, reopen, reply, add, or delete annotations |
 | `mdprobe_status` | `{}` | `{ running, url?, files? }` | Check if server is running |
@@ -139,6 +157,17 @@ You may delete your own annotations (where `author` matches your name) if they b
 The `--once` blocking mode is for scripted/CI use. In Claude Code, the human signals "done" via chat. Read annotations on demand via `mdprobe_annotations`.
 
 Do NOT run `mdprobe spec.md --once` in Claude Code sessions.
+
+### Rule 8 — Draft and review in one step
+
+When you have ANY content >20 lines that needs human review, use the `content`
+parameter instead of presenting it inline in the conversation:
+
+> mdprobe_view({ content: "# Analysis\n\n| Finding | Severity |\n...", filename: "analysis.md", open: true })
+
+This saves the file AND opens it for review in one call.
+Format the content as markdown for best rendering (headings, lists, tables, code blocks).
+You generate the content, so you control the format — there's no parser limitation.
 
 ---
 
