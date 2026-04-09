@@ -270,11 +270,13 @@ export async function createServer(options) {
     onDisconnect,
   } = options
 
-  // 1. Resolve files
-  const resolvedFiles = await resolveFiles(files)
+  // 1. Resolve files (allow empty array for lazy MCP mode)
+  const resolvedFiles = (files && files.length > 0) ? await resolveFiles(files) : []
 
-  // Base directory for static asset serving — use the directory of the first file
-  const assetBaseDir = node_path.dirname(resolvedFiles[0])
+  // Base directory for static asset serving — use the directory of the first file or cwd
+  const assetBaseDir = resolvedFiles.length > 0
+    ? node_path.dirname(resolvedFiles[0])
+    : process.cwd()
 
   // 2. Find an available port
   const actualPort = await findAvailablePort(preferredPort)
@@ -404,6 +406,18 @@ export async function createServer(options) {
     url: `http://127.0.0.1:${actualPort}`,
     port: actualPort,
     address: () => httpServer.address(),
+    addFiles: (newPaths) => {
+      for (const p of newPaths) {
+        const abs = node_path.resolve(p)
+        if (!resolvedFiles.includes(abs)) {
+          resolvedFiles.push(abs)
+          watcher.add(node_path.dirname(abs))
+          broadcastToAll({ type: 'file-added', file: node_path.basename(abs) })
+        }
+      }
+    },
+    getFiles: () => resolvedFiles.map(f => node_path.basename(f)),
+    broadcast: (msg) => broadcastToAll(msg),
     close: (cb) => {
       // Clear all debounce timers
       for (const timer of debounceTimers.values()) clearTimeout(timer)
@@ -754,6 +768,12 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, getOn
         } catch {
           return send404(res)
         }
+      }
+
+      // SPA catch-all: serve HTML shell for any unmatched GET path
+      // This enables deep linking — client reads pathname to auto-select file
+      if (req.method === 'GET') {
+        return sendHTML(res, 200, SHELL_HTML)
       }
 
       // Fallback — 404
