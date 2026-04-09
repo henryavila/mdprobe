@@ -236,10 +236,10 @@ if (!SHELL_HTML) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>mdprobe</title>
+  <title>mdProbe</title>
 </head>
 <body>
-  <div id="app"><p style="padding:40px;font-family:sans-serif">mdprobe — run <code>npm run build:ui</code> to build the UI</p></div>
+  <div id="app"><p style="padding:40px;font-family:sans-serif">mdProbe — run <code>npm run build:ui</code> to build the UI</p></div>
 </body>
 </html>`
 }
@@ -283,15 +283,18 @@ export async function createServer(options) {
 
   // 3. Build route handler (onFinish is set below for --once mode)
   let onFinishCallback = null
-  // broadcastToAll is defined below after wss; forward-ref via closure
+  // broadcastToAll and addFiles are defined below; forward-ref via closure
   let broadcastFn = () => {}
+  let addFilesFn = () => {}
   const handleRequest = createRequestHandler({
     resolvedFiles,
     assetBaseDir,
     once,
     author,
+    port: actualPort,
     getOnFinish: () => onFinishCallback,
     broadcast: (msg) => broadcastFn(msg),
+    addFiles: (paths) => addFilesFn(paths),
   })
 
   // 4. Create HTTP server
@@ -356,6 +359,16 @@ export async function createServer(options) {
     }
   }
   broadcastFn = broadcastToAll
+  addFilesFn = (newPaths) => {
+    for (const p of newPaths) {
+      const abs = node_path.resolve(p)
+      if (!resolvedFiles.includes(abs)) {
+        resolvedFiles.push(abs)
+        watcher.add(node_path.dirname(abs))
+        broadcastToAll({ type: 'file-added', file: node_path.basename(abs) })
+      }
+    }
+  }
 
   watcher.on('change', (filePath) => {
     if (!filePath.endsWith('.md')) return
@@ -406,16 +419,7 @@ export async function createServer(options) {
     url: `http://127.0.0.1:${actualPort}`,
     port: actualPort,
     address: () => httpServer.address(),
-    addFiles: (newPaths) => {
-      for (const p of newPaths) {
-        const abs = node_path.resolve(p)
-        if (!resolvedFiles.includes(abs)) {
-          resolvedFiles.push(abs)
-          watcher.add(node_path.dirname(abs))
-          broadcastToAll({ type: 'file-added', file: node_path.basename(abs) })
-        }
-      }
-    },
+    addFiles: addFilesFn,
     getFiles: () => resolvedFiles.map(f => node_path.basename(f)),
     broadcast: (msg) => broadcastToAll(msg),
     close: (cb) => {
@@ -464,7 +468,7 @@ export async function createServer(options) {
  * @param {string} [ctx.author]
  * @returns {(req: node_http.IncomingMessage, res: node_http.ServerResponse) => void}
  */
-function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, getOnFinish, broadcast }) {
+function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port, getOnFinish, broadcast, addFiles }) {
   return async (req, res) => {
     try {
       const parsedUrl = new URL(req.url, `http://${req.headers.host}`)
@@ -702,6 +706,34 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, getOn
       // GET /api/config
       if (req.method === 'GET' && pathname === '/api/config') {
         return sendJSON(res, 200, { author: author || 'anonymous' })
+      }
+
+      // GET /api/status — identity check for singleton discovery
+      if (req.method === 'GET' && pathname === '/api/status') {
+        return sendJSON(res, 200, {
+          identity: 'mdprobe',
+          pid: process.pid,
+          port,
+          files: resolvedFiles.map(f => node_path.basename(f)),
+          uptime: process.uptime(),
+        })
+      }
+
+      // POST /api/add-files — add files from another process (singleton join)
+      if (req.method === 'POST' && pathname === '/api/add-files') {
+        const body = await readBody(req)
+        const { files: newFiles } = body
+        if (!Array.isArray(newFiles) || newFiles.length === 0) {
+          return sendJSON(res, 400, { error: 'Missing or empty files array' })
+        }
+        const before = resolvedFiles.length
+        addFiles(newFiles)
+        const added = resolvedFiles.slice(before).map(f => node_path.basename(f))
+        return sendJSON(res, 200, {
+          ok: true,
+          files: resolvedFiles.map(f => node_path.basename(f)),
+          added,
+        })
       }
 
       // GET /api/review/status (only in once mode)

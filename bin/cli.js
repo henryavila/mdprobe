@@ -10,6 +10,7 @@ import { exportReport, exportInline, exportJSON, exportSARIF } from '../src/expo
 import { createServer as createMdprobeServer } from '../src/server.js'
 import { findMarkdownFiles, extractFlag, hasFlag } from '../src/cli-utils.js'
 import { openBrowser } from '../src/open-browser.js'
+import { discoverExistingServer, joinExistingServer, writeLockFile, registerShutdownHandlers } from '../src/singleton.js'
 
 // ---------------------------------------------------------------------------
 // Resolve paths
@@ -30,7 +31,7 @@ const rawArgs = process.argv.slice(2)
 function printUsage() {
   console.log(`Usage: mdprobe [files...] [options]
 
-  Markdown viewer + reviewer with live reload and persistent annotations.
+  mdProbe — Markdown viewer + reviewer with live reload and persistent annotations.
 
 Options:
   --port <n>    Port number (default: 3000)
@@ -270,28 +271,23 @@ async function main() {
     }
   }
 
-  // Start the mdprobe server (HTTP + WebSocket + file watcher + Preact UI)
-  try {
-    const server = await createMdprobeServer({
-      files: mdFiles,
-      port,
-      open: false,
-      once: onceFlag,
-      author: currentAuthor,
-    })
-
-    console.log(`Server listening at ${server.url}`)
-
-    // Open browser in both serve and review modes (skip with --no-open)
-    if (!noOpenFlag) {
-      try { await openBrowser(server.url) } catch { /* ignore */ }
-    }
-
-    if (onceFlag) {
+  // --once mode: always isolated (never singleton)
+  if (onceFlag) {
+    try {
+      const server = await createMdprobeServer({
+        files: mdFiles,
+        port,
+        open: false,
+        once: true,
+        author: currentAuthor,
+      })
+      console.log(`Server listening at ${server.url}`)
+      if (!noOpenFlag) {
+        try { await openBrowser(server.url) } catch { /* ignore */ }
+      }
       console.log(`Review mode: ${mdFiles.length} file(s)`)
       mdFiles.forEach(f => console.log(`  - ${basename(f)}`))
 
-      // Block until user clicks "Finish Review" in the UI
       const result = await server.finishPromise
       console.log('\nReview complete.')
       if (result.yamlPaths?.length > 0) {
@@ -301,6 +297,51 @@ async function main() {
       }
       await server.close()
       process.exit(0)
+    } catch (err) {
+      fatal(`Error: ${err.message}`)
+    }
+    return
+  }
+
+  // --- Singleton mode: reuse existing server if running ---
+  try {
+    const existing = await discoverExistingServer()
+
+    if (existing) {
+      console.log(`Found running mdprobe at ${existing.url}`)
+      const result = await joinExistingServer(existing.url, mdFiles)
+      if (result.ok) {
+        console.log(`Added ${mdFiles.length} file(s) to existing server`)
+        if (!noOpenFlag) {
+          const fileUrl = mdFiles.length === 1
+            ? `${existing.url}/${basename(mdFiles[0])}`
+            : existing.url
+          try { await openBrowser(fileUrl) } catch { /* ignore */ }
+        }
+        process.exit(0)
+      }
+      console.log('Could not join existing server, starting new instance...')
+    }
+
+    // Start new server
+    const server = await createMdprobeServer({
+      files: mdFiles,
+      port,
+      open: false,
+      author: currentAuthor,
+    })
+
+    await writeLockFile({
+      pid: process.pid,
+      port: server.port,
+      url: server.url,
+      startedAt: new Date().toISOString(),
+    })
+    registerShutdownHandlers(server)
+
+    console.log(`Server listening at ${server.url}`)
+    if (!noOpenFlag) {
+      try { await openBrowser(server.url) } catch { /* ignore */ }
     }
   } catch (err) {
     fatal(`Error: ${err.message}`)
