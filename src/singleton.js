@@ -1,10 +1,34 @@
 import { readFile, writeFile, unlink } from 'node:fs/promises'
 import { unlinkSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import node_http from 'node:http'
+import { fileURLToPath } from 'node:url'
+import { hashContent } from './hash.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const DIST_INDEX = join(dirname(__filename), '..', 'dist', 'index.html')
 
 const DEFAULT_LOCK_PATH = join(tmpdir(), 'mdprobe.lock')
+
+/**
+ * Compute a build hash from dist/index.html content.
+ * Falls back to package version if dist doesn't exist (dev mode).
+ * @returns {Promise<string>}
+ */
+export async function computeBuildHash() {
+  try {
+    const content = await readFile(DIST_INDEX, 'utf-8')
+    return hashContent(content)
+  } catch {
+    try {
+      const pkg = JSON.parse(await readFile(join(dirname(__filename), '..', 'package.json'), 'utf-8'))
+      return `pkg:${pkg.version}`
+    } catch {
+      return 'unknown'
+    }
+  }
+}
 
 /**
  * Read and parse the lock file.
@@ -98,11 +122,24 @@ export function pingServer(url, timeout = 2000) {
  * Discover an existing running mdprobe server via lock file + HTTP verification.
  * Cleans up stale lock files automatically.
  * @param {string} [lockPath]
+ * @param {string} [currentBuildHash] - If provided, reject servers with different buildHash
  * @returns {Promise<{url: string, port: number} | null>}
  */
-export async function discoverExistingServer(lockPath = DEFAULT_LOCK_PATH) {
+export async function discoverExistingServer(lockPath = DEFAULT_LOCK_PATH, currentBuildHash) {
   const lock = await readLockFile(lockPath)
   if (!lock) return null
+
+  // Reject lock files without buildHash when we have one (backward compat)
+  if (currentBuildHash && !lock.buildHash) {
+    await removeLockFile(lockPath)
+    return null
+  }
+
+  // Reject lock files with different buildHash (stale server)
+  if (currentBuildHash && lock.buildHash !== currentBuildHash) {
+    await removeLockFile(lockPath)
+    return null
+  }
 
   if (!isProcessAlive(lock.pid)) {
     await removeLockFile(lockPath)
