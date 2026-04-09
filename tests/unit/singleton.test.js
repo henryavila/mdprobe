@@ -230,6 +230,95 @@ describe('discoverExistingServer', () => {
 })
 
 // ---------------------------------------------------------------------------
+// buildHash stale server detection
+// ---------------------------------------------------------------------------
+
+describe('buildHash stale server detection', () => {
+  let testServer
+
+  afterEach(() => {
+    if (testServer) {
+      testServer.close()
+      testServer = null
+    }
+  })
+
+  it('rejects server with different buildHash', async () => {
+    testServer = node_http.createServer((req, res) => {
+      if (req.url === '/api/status') {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ identity: 'mdprobe', pid: process.pid, buildHash: 'old-hash-abc' }))
+      }
+    })
+    await new Promise(r => testServer.listen(0, '127.0.0.1', r))
+    const port = testServer.address().port
+
+    await writeLockFile({
+      pid: process.pid,
+      port,
+      url: `http://127.0.0.1:${port}`,
+      startedAt: new Date().toISOString(),
+      buildHash: 'old-hash-abc',
+    }, lockPath)
+
+    // Pass a different buildHash as "current"
+    const result = await discoverExistingServer(lockPath, 'new-hash-xyz')
+    expect(result).toBeNull()
+    // Lock file should be cleaned up
+    expect(await readLockFile(lockPath)).toBeNull()
+  })
+
+  it('accepts server with matching buildHash', async () => {
+    const hash = 'matching-hash-123'
+    testServer = node_http.createServer((req, res) => {
+      if (req.url === '/api/status') {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ identity: 'mdprobe', pid: process.pid, buildHash: hash }))
+      }
+    })
+    await new Promise(r => testServer.listen(0, '127.0.0.1', r))
+    const port = testServer.address().port
+
+    await writeLockFile({
+      pid: process.pid,
+      port,
+      url: `http://127.0.0.1:${port}`,
+      startedAt: new Date().toISOString(),
+      buildHash: hash,
+    }, lockPath)
+
+    const result = await discoverExistingServer(lockPath, hash)
+    expect(result).toEqual({
+      url: `http://127.0.0.1:${port}`,
+      port,
+    })
+  })
+
+  it('rejects lock file missing buildHash (backward compat)', async () => {
+    testServer = node_http.createServer((req, res) => {
+      if (req.url === '/api/status') {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ identity: 'mdprobe', pid: process.pid }))
+      }
+    })
+    await new Promise(r => testServer.listen(0, '127.0.0.1', r))
+    const port = testServer.address().port
+
+    // Lock file WITHOUT buildHash (old format)
+    await writeLockFile({
+      pid: process.pid,
+      port,
+      url: `http://127.0.0.1:${port}`,
+      startedAt: new Date().toISOString(),
+    }, lockPath)
+
+    const result = await discoverExistingServer(lockPath, 'current-hash')
+    expect(result).toBeNull()
+    expect(await readLockFile(lockPath)).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // joinExistingServer
 // ---------------------------------------------------------------------------
 

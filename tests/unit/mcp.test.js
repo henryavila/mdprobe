@@ -1,6 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { writeFile, mkdir, rm, mkdtemp, readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 import { tmpdir } from 'node:os'
 import yaml from 'js-yaml'
 
@@ -179,5 +182,62 @@ describe('MCP tool handlers (via HTTP API)', () => {
 
     const final = await AnnotationFile.load(sidecarPath)
     expect(final.annotations).toHaveLength(0)
+  })
+})
+
+describe('mdprobe_view content parameter validation', () => {
+  let tmp
+
+  afterEach(async () => {
+    if (tmp) await rm(tmp, { recursive: true, force: true })
+  })
+
+  it('saves content to filename and returns savedTo path', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'mcp-content-'))
+    const filename = join(tmp, 'draft.md')
+    const content = '# Draft\n\nThis is a test draft with enough content.'
+
+    const { saveContentToFile } = await import('../../src/mcp.js')
+    const result = await saveContentToFile(content, filename)
+
+    expect(result.savedTo).toBe(resolve(filename))
+    const saved = await readFile(filename, 'utf-8')
+    expect(saved).toBe(content)
+  })
+
+  it('returns error when content provided without filename', async () => {
+    const { validateViewParams } = await import('../../src/mcp.js')
+    const result = validateViewParams({ content: '# Hello' })
+    expect(result.error).toMatch(/filename.*required/i)
+  })
+
+  it('returns error when both paths and content provided', async () => {
+    const { validateViewParams } = await import('../../src/mcp.js')
+    const result = validateViewParams({ paths: ['a.md'], content: '# Hello', filename: 'b.md' })
+    expect(result.error).toMatch(/cannot.*both/i)
+  })
+
+  it('returns error when neither paths nor content provided', async () => {
+    const { validateViewParams } = await import('../../src/mcp.js')
+    const result = validateViewParams({})
+    expect(result.error).toMatch(/either.*paths.*content/i)
+  })
+
+  it('tool description contains semantic review trigger', async () => {
+    const mcpSource = await readFile(join(__dirname, '../../src/mcp.js'), 'utf-8')
+    expect(mcpSource).toContain('BEFORE asking for feedback')
+    expect(mcpSource).toContain('findings, specs, plans, analysis')
+  })
+
+  it('overwrites existing file with content', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'mcp-overwrite-'))
+    const filename = join(tmp, 'existing.md')
+    await writeFile(filename, '# Old content')
+
+    const { saveContentToFile } = await import('../../src/mcp.js')
+    await saveContentToFile('# New content', filename)
+
+    const saved = await readFile(filename, 'utf-8')
+    expect(saved).toBe('# New content')
   })
 })
