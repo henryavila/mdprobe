@@ -44,7 +44,7 @@ export function LeftPanel({ onFileSelect }) {
 
           {/* Files section */}
           {files.value.length > 1 && (
-            <div style="padding: 0 8px 8px">
+            <div class="file-list-section">
               <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); padding: 4px 4px 6px; font-weight: 600">Files</div>
               {files.value.map(f => {
                 const path = f.path || f
@@ -65,7 +65,7 @@ export function LeftPanel({ onFileSelect }) {
           )}
 
           {/* TOC section */}
-          <div style="padding: 0 8px">
+          <div class="toc-section">
             <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); padding: 4px 4px 6px; font-weight: 600">Sections</div>
             {currentToc.value.length === 0 ? (
               <div style="padding: 8px; color: var(--text-muted); font-size: 13px">No sections</div>

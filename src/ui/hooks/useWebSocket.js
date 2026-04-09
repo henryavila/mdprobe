@@ -26,6 +26,8 @@ export function useWebSocket() {
   const reconnectTimer = useRef(null)
   const unmounted = useRef(false)
 
+  const hasConnected = useRef(false)
+
   const connect = useCallback(() => {
     if (unmounted.current) return
 
@@ -36,6 +38,14 @@ export function useWebSocket() {
     ws.onopen = () => {
       // Reset back-off on successful connection
       reconnectDelay.current = RECONNECT_DELAY_MS
+
+      // On reconnect, re-sync file list from server (may be a new server)
+      if (hasConnected.current) {
+        fetch('/api/files').then(r => r.json()).then(data => {
+          files.value = data
+        }).catch(() => {})
+      }
+      hasConnected.current = true
     }
 
     ws.onmessage = (event) => {
