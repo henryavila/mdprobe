@@ -205,6 +205,54 @@ describe('Drift banner layout (integration)', () => {
     expect(data.drift.anchorStatus[annotationId]).toBe('anchored')
   })
 
+  it('WebSocket broadcasts drift with anchorStatus when file changes', async () => {
+    const mdPath = await writeFixture('ws-drift.md', '# WS Test\n\nAnnotated text here.\n')
+    const server = track(await createServer({
+      files: [mdPath],
+      port: 5212,
+      open: false,
+    }))
+
+    // Add annotation
+    await httpRequest(`${server.url}/api/annotations`, 'POST', {
+      file: 'ws-drift.md',
+      action: 'add',
+      data: {
+        selectors: {
+          position: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 22 },
+          quote: { exact: 'Annotated text here.', prefix: '', suffix: '' },
+        },
+        comment: 'WS test',
+        tag: 'bug',
+        author: 'Tester',
+      },
+    })
+
+    // Connect WebSocket and listen for drift message
+    const WebSocket = (await import('ws')).default
+    const ws = new WebSocket(`ws://127.0.0.1:5212/ws`)
+    const messages = []
+
+    await new Promise((resolve) => { ws.on('open', resolve) })
+    ws.on('message', (data) => { messages.push(JSON.parse(data.toString())) })
+
+    // Modify file — delete annotated text to create orphan
+    await node_fs.writeFile(mdPath, '# WS Test\n\nTotally different content.\n', 'utf-8')
+
+    // Wait for debounce + processing
+    await new Promise(r => setTimeout(r, 500))
+
+    ws.close()
+
+    // Find drift message
+    const driftMsg = messages.find(m => m.type === 'drift')
+    expect(driftMsg).toBeDefined()
+    expect(driftMsg.anchorStatus).toBeDefined()
+    // The annotation's text was deleted → orphan
+    const statuses = Object.values(driftMsg.anchorStatus)
+    expect(statuses).toContain('orphan')
+  })
+
   it('layout is correct when there is no drift (no banner in DOM)', async () => {
     // Start server, do NOT create annotations → no sidecar → no drift
     const mdPath = await writeFixture('clean.md', '# Clean\n\nNo annotations here.\n')

@@ -393,6 +393,25 @@ export async function createServer(options) {
           html: rendered.html,
           toc: rendered.toc,
         })
+
+        // Check for drift and broadcast anchor status
+        const sidecarPath = filePath.replace(/\.md$/, '.annotations.yaml')
+        try {
+          const drift = await detectDrift(sidecarPath, filePath)
+          if (drift.drifted) {
+            const af = await AnnotationFile.load(sidecarPath)
+            const anns = af.toJSON().annotations
+            const anchorResults = reanchorAll(anns, content)
+            broadcastToAll({
+              type: 'drift',
+              warning: true,
+              file: fileName,
+              anchorStatus: Object.fromEntries(
+                [...anchorResults].map(([id, r]) => [id, r.status === 'orphan' ? 'orphan' : 'anchored'])
+              ),
+            })
+          }
+        } catch { /* no sidecar or drift check failed — skip */ }
       } catch (err) {
         broadcastToAll({
           type: 'error',
