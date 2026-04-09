@@ -1,6 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { writeFile, mkdir, rm, mkdtemp, readFile } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { join, resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 import { tmpdir } from 'node:os'
 import yaml from 'js-yaml'
 
@@ -218,6 +221,12 @@ describe('mdprobe_view content parameter validation', () => {
     const { validateViewParams } = await import('../../src/mcp.js')
     const result = validateViewParams({})
     expect(result.error).toMatch(/either.*paths.*content/i)
+  })
+
+  it('tool description contains semantic review trigger', async () => {
+    const mcpSource = await readFile(join(__dirname, '../../src/mcp.js'), 'utf-8')
+    expect(mcpSource).toContain('BEFORE asking for feedback')
+    expect(mcpSource).toContain('findings, specs, plans, analysis')
   })
 
   it('overwrites existing file with content', async () => {
