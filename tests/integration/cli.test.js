@@ -53,7 +53,9 @@ function run(args = [], { cwd, timeout = 5000, input } = {}) {
  * Returns { proc, waitForOutput, kill }.
  */
 function spawnCli(args = [], { cwd } = {}) {
-  const proc = spawn(NODE, [CLI_PATH, ...args], {
+  // Always prevent browser opening in tests
+  const safeArgs = args.includes('--no-open') ? args : [...args, '--no-open']
+  const proc = spawn(NODE, [CLI_PATH, ...safeArgs], {
     cwd: cwd || tmpDir,
     env: { ...process.env, NO_COLOR: '1' },
     stdio: ['pipe', 'pipe', 'pipe'],
