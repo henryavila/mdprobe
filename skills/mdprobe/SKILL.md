@@ -1,9 +1,11 @@
 ---
 name: mdProbe
-description: Human review tool for any content >20 lines. BEFORE asking for
-  feedback on findings, specs, plans, analysis, or any long output, save to
-  file and open with mdprobe_view. Renders markdown with annotations, section
-  approval, and structured feedback via YAML sidecars.
+description: Preview, visualize, and review markdown in the browser. Call
+  mdprobe_view BEFORE presenting any content >20 lines for feedback or
+  validation — findings, specs, plans, analysis, docs, or any long output.
+  Replaces inline review with rendered markdown, tables, diagrams, annotations,
+  and section approval. Trigger on preview, visualize, validate, render,
+  review document, browser preview, open in browser, feedback on long content.
 ---
 
 # mdProbe — Markdown Reviewer (MCP)

@@ -229,6 +229,12 @@ describe('mdprobe_view content parameter validation', () => {
     expect(mcpSource).toContain('findings, specs, plans, analysis')
   })
 
+  it('tool description leads with use case verb (preview/open)', async () => {
+    const mcpSource = await readFile(join(__dirname, '../../src/mcp.js'), 'utf-8')
+    // mdprobe_view description must lead with Preview, not "Open content for human review"
+    expect(mcpSource).toMatch(/description:\s*'Preview/)
+  })
+
   it('overwrites existing file with content', async () => {
     tmp = await mkdtemp(join(tmpdir(), 'mcp-overwrite-'))
     const filename = join(tmp, 'existing.md')

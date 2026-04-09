@@ -9,25 +9,28 @@ const PROJECT_ROOT = join(dirname(__filename), '..')
 const SKILL_SOURCE = join(PROJECT_ROOT, 'skills', 'mdprobe', 'SKILL.md')
 const DEFAULT_CONFIG_PATH = join(homedir(), '.mdprobe.json')
 
-// IDE skill directory mappings
+// IDE skill directory mappings — detectDir is the IDE base config dir,
+// skillsDir is where skills get installed (may not exist yet).
 const IDE_CONFIGS = {
-  'Claude Code': { skillsDir: join(homedir(), '.claude', 'skills') },
-  'Cursor': { skillsDir: join(homedir(), '.cursor', 'skills') },
-  'Gemini': { skillsDir: join(homedir(), '.gemini', 'skills') },
+  'Claude Code': { detectDir: join(homedir(), '.claude'), skillsDir: join(homedir(), '.claude', 'skills') },
+  'Cursor': { detectDir: join(homedir(), '.cursor'), skillsDir: join(homedir(), '.cursor', 'skills') },
+  'Gemini': { detectDir: join(homedir(), '.gemini'), skillsDir: join(homedir(), '.gemini', 'skills') },
 }
 
 /**
- * Detect which IDEs have skill directories.
- * @returns {Promise<string[]>} List of IDE names with skills dirs
+ * Detect which IDEs are installed by checking their base config directory.
+ * @param {object} [overrideConfigs] - Override IDE_CONFIGS for testing
+ * @returns {Promise<string[]>} List of IDE names detected
  */
-export async function detectIDEs() {
+export async function detectIDEs(overrideConfigs) {
+  const configs = overrideConfigs || IDE_CONFIGS
   const detected = []
-  for (const [name, config] of Object.entries(IDE_CONFIGS)) {
+  for (const [name, config] of Object.entries(configs)) {
     try {
-      await access(config.skillsDir)
+      await access(config.detectDir)
       detected.push(name)
     } catch {
-      // Directory doesn't exist
+      // IDE not installed
     }
   }
   return detected
@@ -37,10 +40,12 @@ export async function detectIDEs() {
  * Install the SKILL.md file to an IDE's skill directory.
  * @param {string} ide - IDE name (e.g., 'Claude Code')
  * @param {string} [content] - Skill content (reads from source if omitted)
+ * @param {object} [overrideConfigs] - Override IDE_CONFIGS for testing
  * @returns {Promise<string>} Path where skill was installed
  */
-export async function installSkill(ide, content) {
-  const config = IDE_CONFIGS[ide]
+export async function installSkill(ide, content, overrideConfigs) {
+  const configs = overrideConfigs || IDE_CONFIGS
+  const config = configs[ide]
   if (!config) throw new Error(`Unknown IDE: ${ide}`)
 
   if (!content) {

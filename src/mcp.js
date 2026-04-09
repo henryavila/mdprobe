@@ -83,7 +83,7 @@ export async function startMcpServer() {
   })
 
   server.registerTool('mdprobe_view', {
-    description: 'Open content for human review in the browser. Call this BEFORE asking for feedback on any content >20 lines — findings, specs, plans, analysis, or any long output.',
+    description: 'Preview and open content in the browser for human review or validation. Call this BEFORE asking for feedback on any content >20 lines — findings, specs, plans, analysis, docs, or any long output. Renders markdown with syntax highlighting, tables, Mermaid diagrams, and LaTeX math.',
     inputSchema: z.object({
       paths: z.array(z.string()).optional().describe('Paths to .md files (relative or absolute)'),
       content: z.string().optional().describe('Raw markdown content to save and open'),
