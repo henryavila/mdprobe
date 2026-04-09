@@ -22,6 +22,7 @@ export const leftPanelOpen = signal(localStorage.getItem('mdprobe-left-panel') !
 export const rightPanelOpen = signal(localStorage.getItem('mdprobe-right-panel') !== 'false')
 export const theme = signal(localStorage.getItem('mdprobe-theme') || 'mocha')
 export const driftWarning = signal(false)
+export const anchorStatus = signal({})  // Map<annotationId, 'anchored'|'orphan'>
 
 // Persist panel state on change via effect (subscribed below)
 leftPanelOpen.subscribe(v => localStorage.setItem('mdprobe-left-panel', v))
@@ -54,6 +55,14 @@ export const filteredAnnotations = computed(() => {
 
   return list
 })
+
+export const orphanedAnnotations = computed(() =>
+  filteredAnnotations.value.filter(a => anchorStatus.value[a.id] === 'orphan')
+)
+
+export const anchoredAnnotations = computed(() =>
+  filteredAnnotations.value.filter(a => anchorStatus.value[a.id] !== 'orphan')
+)
 
 export const uniqueTags = computed(() =>
   [...new Set(annotations.value.map(a => a.tag))]
