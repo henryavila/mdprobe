@@ -553,7 +553,8 @@ describe('Response Format', () => {
 
     const res = await httpGet(`${server.url}/nonexistent/route`)
 
-    expect(res.status).toBe(404)
+    // SPA catch-all: unmatched GET routes return HTML shell (200) for client-side routing
+    expect(res.status).toBe(200)
   })
 })
 

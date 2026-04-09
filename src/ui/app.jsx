@@ -40,17 +40,23 @@ function App() {
   useEffect(() => {
     fetch('/api/files').then(r => r.json()).then(data => {
       files.value = data
-      if (data.length > 0) {
-        const first = data[0].path || data[0]
-        currentFile.value = first
-        // Fetch rendered content
-        fetch(`/api/file?path=${encodeURIComponent(first)}`).then(r => r.json()).then(d => {
-          currentHtml.value = d.html
-          currentToc.value = d.toc || []
+      if (data.length === 0) return
+
+      // Deep link: check if URL pathname matches a file
+      const pathname = window.location.pathname
+      let target = null
+      if (pathname && pathname !== '/') {
+        const cleaned = pathname.replace(/^\//, '')
+        target = data.find(f => {
+          const fp = f.path || f
+          return fp === cleaned ||
+            fp === cleaned.split('/').pop() ||
+            (f.absPath && f.absPath.endsWith('/' + cleaned))
         })
-        // Fetch annotations
-        annotationOps.fetchAnnotations(first)
       }
+
+      const selected = target ? (target.path || target) : (data[0].path || data[0])
+      handleFileSelect(selected)
     })
 
     fetch('/api/config').then(r => r.json()).then(data => {

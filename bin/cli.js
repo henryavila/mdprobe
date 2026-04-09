@@ -9,6 +9,7 @@ import { AnnotationFile } from '../src/annotations.js'
 import { exportReport, exportInline, exportJSON, exportSARIF } from '../src/export.js'
 import { createServer as createMdprobeServer } from '../src/server.js'
 import { findMarkdownFiles, extractFlag, hasFlag } from '../src/cli-utils.js'
+import { openBrowser } from '../src/open-browser.js'
 
 // ---------------------------------------------------------------------------
 // Resolve paths
@@ -34,13 +35,17 @@ function printUsage() {
 Options:
   --port <n>    Port number (default: 3000)
   --once        Review mode (single pass, then exit)
+  --no-open     Don't auto-open browser
   --help, -h    Show help
   --version, -v Show version
 
 Subcommands:
+  setup                  Interactive setup (skill + MCP + hook)
+  setup --remove         Uninstall everything
+  setup --yes [--author] Non-interactive setup
+  mcp                    Start MCP server (stdio, used by Claude Code)
   config [key] [value]   Manage configuration
   export <path> [flags]  Export annotations (--report, --inline, --json, --sarif)
-  install --plugin       Install Claude Code skill/plugin
 `)
 }
 
@@ -112,28 +117,19 @@ async function main() {
     process.exit(0)
   }
 
-  // ---- install subcommand ----
-  if (subcommand === 'install') {
-    const target = args[1]
-    if (target === '--plugin') {
-      const os = await import('node:os')
-      const fs = await import('node:fs/promises')
-      const destDir = join(os.homedir(), '.claude', 'skills', 'mdprobe')
-      const srcFile = join(PROJECT_ROOT, 'skills', 'mdprobe', 'SKILL.md')
-
-      try {
-        await fs.mkdir(destDir, { recursive: true })
-        const content = await fs.readFile(srcFile, 'utf-8')
-        await fs.writeFile(join(destDir, 'SKILL.md'), content, 'utf-8')
-        console.log(`Plugin installed to ${destDir}/SKILL.md`)
-        console.log('Claude Code will now suggest mdprobe for rich markdown output.')
-      } catch (err) {
-        fatal(`Error installing plugin: ${err.message}`)
-      }
-    } else {
-      fatal('Usage: mdprobe install --plugin')
-    }
+  // ---- setup subcommand ----
+  if (subcommand === 'setup') {
+    const { runSetup } = await import('../src/setup-ui.js')
+    await runSetup(args.slice(1))
     process.exit(0)
+  }
+
+  // ---- mcp subcommand ----
+  if (subcommand === 'mcp') {
+    const { startMcpServer } = await import('../src/mcp.js')
+    await startMcpServer()
+    // MCP server runs until parent process terminates
+    return
   }
 
   // ---- export subcommand ----
@@ -286,6 +282,11 @@ async function main() {
 
     console.log(`Server listening at ${server.url}`)
 
+    // Open browser in both serve and review modes (skip with --no-open)
+    if (!noOpenFlag) {
+      try { await openBrowser(server.url) } catch { /* ignore */ }
+    }
+
     if (onceFlag) {
       console.log(`Review mode: ${mdFiles.length} file(s)`)
       mdFiles.forEach(f => console.log(`  - ${basename(f)}`))
@@ -300,30 +301,6 @@ async function main() {
       }
       await server.close()
       process.exit(0)
-    }
-
-    // Try to open browser (skip with --no-open)
-    if (noOpenFlag) { /* skip */ } else try {
-      const { execFile: execFileFn } = await import('node:child_process')
-      const isWSL = await readFile('/proc/version', 'utf-8').then(v => /microsoft/i.test(v)).catch(() => false)
-
-      let cmd, args
-      if (process.platform === 'darwin') {
-        cmd = 'open'
-        args = [server.url]
-      } else if (process.platform === 'win32') {
-        cmd = 'cmd'
-        args = ['/c', 'start', server.url]
-      } else if (isWSL) {
-        cmd = '/mnt/c/Windows/System32/cmd.exe'
-        args = ['/c', 'start', server.url]
-      } else {
-        cmd = 'xdg-open'
-        args = [server.url]
-      }
-      execFileFn(cmd, args, { stdio: 'ignore' })
-    } catch {
-      // Browser open failed — user can navigate manually
     }
   } catch (err) {
     fatal(`Error: ${err.message}`)

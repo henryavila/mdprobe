@@ -1,358 +1,194 @@
 ---
 name: mdprobe
-description: Use mdprobe to render markdown in the browser and collect structured human feedback (annotations, section approvals) via YAML sidecar files
+description: Render and review markdown files in the browser. Use whenever
+  generating, editing, or referencing any .md file. Opens a live preview
+  with annotations, section approval, and structured feedback via YAML sidecars.
 ---
 
-# mdprobe — Markdown Viewer & Reviewer
-
-Render markdown in the browser. Collect structured feedback from humans. Read it back as YAML.
+# mdprobe — Markdown Reviewer (MCP)
 
 ## When to Use
 
-- Output longer than 40-60 lines (specs, RFCs, ADRs, design docs)
+- Generating, editing, or referencing any `.md` file
+- Output longer than 40 lines (specs, RFCs, ADRs, design docs)
 - Tables, Mermaid diagrams, math/LaTeX, syntax-highlighted code
-- When you need the human to **review and annotate** before you proceed
-- When you need **section-level approval** (approved/rejected per heading)
+- Human needs to **review and annotate** before you proceed
+- You need **section-level approval** (approved/rejected per heading)
 
 ## When NOT to Use
 
 - Short answers or code snippets (< 40 lines)
-- Simple text responses
+- Simple text responses with no markdown files involved
 - Interactive debugging sessions
 
 ---
 
-## View Mode — render and continue working
+## MCP Tools
 
-Write markdown to a file, launch mdprobe in the background. The human reads while you keep working.
-
-```bash
-# Write your output
-cat > output.md << 'EOF'
-# Your spec here
-EOF
-
-# Launch viewer (browser opens automatically, process runs in background)
-mdprobe output.md &
-```
-
-Use `run_in_background: true` when calling via Bash tool. Add `--no-open` if you don't want the browser to auto-open.
-
-The server watches for file changes — if you update the `.md` file, the browser hot-reloads automatically.
-
-## Review Mode — block until human finishes
-
-When you need the human to review and annotate before you continue:
-
-```bash
-# This BLOCKS until the human clicks "Finish Review" in the browser
-mdprobe spec.md --once
-```
-
-The process prints paths to generated `.annotations.yaml` files on exit. Exit code 0 means review complete.
-
-### Full agent workflow
-
-```
-1. Agent writes spec.md
-2. Agent runs: mdprobe spec.md --once        (process BLOCKS here)
-3. Human opens browser, reads the rendered markdown
-4. Human selects text → adds annotations (bug, question, suggestion, nitpick)
-5. Human approves/rejects sections via heading buttons
-6. Human clicks "Finish Review"
-7. Process unblocks, prints YAML paths to stdout
-8. Agent reads spec.annotations.yaml
-9. Agent addresses each annotation
-```
+| Tool | Input | Output | Purpose |
+|------|-------|--------|---------|
+| `mdprobe_view` | `{ paths, open? }` | `{ url, files }` | Open files in browser for viewing or review |
+| `mdprobe_annotations` | `{ path }` | `{ source, sections, annotations, summary }` | Read annotations after human review |
+| `mdprobe_update` | `{ path, actions[] }` | `{ updated, annotations, summary }` | Resolve, reopen, reply, add, or delete annotations |
+| `mdprobe_status` | `{}` | `{ running, url?, files? }` | Check if server is running |
 
 ---
 
-## Reading Annotations
+## Rules
 
-After review, load the YAML sidecar and process the feedback:
+### Rule 1 — Always show URL when citing .md
 
-```javascript
-import { AnnotationFile } from '@henryavila/mdprobe/annotations'
+Whenever you mention a `.md` file path in output, call `mdprobe_view` and show the URL.
 
-const af = await AnnotationFile.load('spec.annotations.yaml')
+**Single file:**
 
-// Query annotations
-const open = af.getOpen()           // all unresolved annotations
-const bugs = af.getByTag('bug')     // only bugs
-const questions = af.getByTag('question')
-const mine = af.getByAuthor('Alice')
-const resolved = af.getResolved()   // already handled
-const one = af.getById('a1b2c3d4')  // specific annotation
+> mdprobe_view({ paths: ["docs/spec.md"] })
 
-// Each annotation has:
-// {
-//   id, selectors: { position: { startLine, startColumn, endLine, endColumn },
-//                     quote: { exact, prefix, suffix } },
-//   comment, tag, status, author, created_at, updated_at,
-//   replies: [{ author, comment, created_at }]
-// }
+Show: `📄 docs/spec.md → http://{urlStyle}:{port}/spec.md`
 
-// Process feedback
-for (const ann of open) {
-  console.log(`[${ann.tag}] Line ${ann.selectors.position.startLine}: ${ann.comment}`)
-  if (ann.replies.length > 0) {
-    for (const reply of ann.replies) {
-      console.log(`  ↳ ${reply.author}: ${reply.comment}`)
-    }
-  }
-}
+**Multiple files in one response — one combined call:**
 
-// Mark as handled
-af.resolve(bugs[0].id)
-await af.save('spec.annotations.yaml')
+> mdprobe_view({ paths: ["docs/spec.md", "docs/batch-1.md", "docs/batch-2.md"] })
+
+Show: `📄 3 arquivos → http://{urlStyle}:{port}`
+
+### Rule 2 — Review opens automatically
+
+When the context is review (human needs to read and give feedback now):
+
+> mdprobe_view({ paths: ["spec.md"], open: true })
+
+Show:
+
+```
+📄 Aberto para revisão no browser.
+Anote seus comentários. Me avise quando terminar.
 ```
 
-## Checking Section Approvals
+For multiple files: `📄 3 specs abertos para revisão no browser.`
 
-The human can approve or reject each section (heading) of the document. Check the status:
+### Rule 3 — Read, address, and resolve annotations
 
-```javascript
-const af = await AnnotationFile.load('spec.annotations.yaml')
+When the human says they finished reviewing:
 
-// sections: [{ heading, level, status }]
-// status is: 'approved', 'rejected', or 'pending'
-for (const section of af.sections) {
-  console.log(`${section.heading}: ${section.status}`)
-}
+1. Read annotations for each reviewed file:
+   > mdprobe_annotations({ path: "spec.md" })
 
-// Check if all sections were approved
-const allApproved = af.sections.every(s => s.status === 'approved')
+2. Process each open annotation:
+   - `bug` — fix the issue
+   - `question` — answer or clarify
+   - `suggestion` — evaluate and implement or justify skipping
+   - `nitpick` — fix if trivial
 
-// Find rejected sections that need rework
-const rejected = af.sections.filter(s => s.status === 'rejected')
-```
+3. Report what was addressed and **ask the human to confirm** before resolving.
 
-Approval cascades: if the human approves a parent heading (e.g., H2), all child headings (H3, H4...) under it are also approved. Same for reject and reset.
+4. After confirmation, resolve:
+   > mdprobe_update({ path: "spec.md", actions: [
+   >   { action: "resolve", id: "a1b2c3d4" },
+   >   { action: "resolve", id: "e5f6g7h8" }
+   > ]})
 
-## Export Formats
+5. Human sees resolved annotations in real-time in the browser (greyed out).
 
-```javascript
-import { exportJSON, exportSARIF, exportReport } from '@henryavila/mdprobe/export'
-import { readFile } from 'node:fs/promises'
+**Never resolve without confirmation.** Always ask first.
 
-const af = await AnnotationFile.load('spec.annotations.yaml')
-const source = await readFile('spec.md', 'utf-8')
+### Rule 4 — Reply to explain decisions
 
-const json = exportJSON(af)              // plain JS object
-const sarif = exportSARIF(af, 'spec.md') // SARIF 2.1.0 (open annotations only)
-const report = exportReport(af, source)  // markdown review report
-```
+When the fix isn't self-evident, add a reply explaining what was done before resolving:
 
-SARIF maps tags to severity: `bug` = error, `suggestion` = warning, `question`/`nitpick` = note.
+> mdprobe_update({ path: "spec.md", actions: [
+>   { action: "reply", id: "a1b2", comment: "Changed to PostgreSQL per ADR-003" },
+>   { action: "resolve", id: "a1b2" }
+> ]})
+
+When you **disagree** with a suggestion, reply with justification but do NOT resolve — leave it open for the human to decide:
+
+> mdprobe_update({ path: "spec.md", actions: [
+>   { action: "reply", id: "c3d4", comment: "Keeping current approach because X. Let me know if you still want to change." }
+> ]})
+
+### Rule 5 — Pre-annotate areas of uncertainty
+
+Before asking for review, create annotations to guide the human's attention:
+
+> mdprobe_update({ path: "spec.md", actions: [
+>   { action: "add",
+>     selectors: { position: { startLine: 42, startColumn: 1, endLine: 42, endColumn: 50 },
+>                  quote: { exact: "Rate limit: 100/min", prefix: "", suffix: "" } },
+>     comment: "Is 100/min enough? Load test showed 300/min spikes.",
+>     tag: "question" },
+>   { action: "add",
+>     selectors: { position: { startLine: 78, startColumn: 1, endLine: 78, endColumn: 30 },
+>                  quote: { exact: "Auth via JWT", prefix: "", suffix: "" } },
+>     comment: "Two options: JWT or session cookies. I went with JWT for statelessness. OK?",
+>     tag: "suggestion" }
+> ]})
+
+The human sees these annotations already in the browser when they start reviewing.
+
+### Rule 6 — Delete only own annotations
+
+You may delete your own annotations (where `author` matches your name) if they become irrelevant after changes. **Never delete human annotations** — resolve or reply instead.
+
+> mdprobe_update({ path: "spec.md", actions: [
+>   { action: "delete", id: "my-annotation-id" }
+> ]})
+
+### Rule 7 — No --once in Claude Code
+
+The `--once` blocking mode is for scripted/CI use. In Claude Code, the human signals "done" via chat. Read annotations on demand via `mdprobe_annotations`.
+
+Do NOT run `mdprobe spec.md --once` in Claude Code sessions.
+
+---
+
+## Review Workflow
+
+1. Agent writes or edits `.md` file(s).
+2. Agent calls `mdprobe_view({ paths, open: true })` — browser opens automatically.
+3. Agent shows review message and waits for the human.
+4. Human reads rendered markdown in the browser.
+5. Human selects text and adds annotations (bug, question, suggestion, nitpick).
+6. Human approves/rejects sections via heading buttons.
+7. Human tells the agent they are done (via chat).
+8. Agent calls `mdprobe_annotations({ path })` for each file.
+9. Agent processes each open annotation — fixes bugs, answers questions, evaluates suggestions.
+10. Agent reports what was addressed and asks the human to confirm.
+11. After confirmation, agent calls `mdprobe_update` to resolve annotations with replies.
+12. Human sees resolved annotations in real-time (greyed out in browser).
+13. If new issues remain, repeat from step 4.
+
+---
 
 ## Annotation Tags
 
-| Tag | Meaning | When the human uses it |
-|-----|---------|----------------------|
+| Tag | Meaning | When used |
+|-----|---------|-----------|
 | `bug` | Something is wrong | Factual errors, incorrect logic, broken examples |
 | `question` | Needs clarification | Ambiguous requirements, missing context |
 | `suggestion` | Improvement idea | Better approach, additional feature, alternative |
 | `nitpick` | Minor style/wording | Typos, formatting, naming preferences |
 
-## Interacting with Annotations
-
-### Resolving annotations after you fix them
-
-After addressing an annotation, mark it as resolved so the human knows it's been handled:
-
-```javascript
-import { AnnotationFile } from '@henryavila/mdprobe/annotations'
-
-const af = await AnnotationFile.load('spec.annotations.yaml')
-
-for (const ann of af.getOpen()) {
-  // Process the annotation (fix the bug, answer the question, etc.)
-
-  // Mark as resolved
-  af.resolve(ann.id)
-}
-
-// Persist changes — the human will see these as resolved in the UI
-await af.save('spec.annotations.yaml')
-```
-
-### Replying to annotations
-
-Add a reply to explain what you did, ask for clarification, or acknowledge the feedback:
-
-```javascript
-const af = await AnnotationFile.load('spec.annotations.yaml')
-
-const bugs = af.getByTag('bug')
-for (const bug of bugs) {
-  af.addReply(bug.id, {
-    author: 'Agent',
-    comment: `Fixed in commit abc123. Changed line ${bug.selectors.position.startLine}.`,
-  })
-  af.resolve(bug.id)
-}
-
-await af.save('spec.annotations.yaml')
-```
-
-### Creating annotations before human review
-
-Pre-annotate sections you're unsure about, so the human knows where to focus:
-
-```javascript
-const af = await AnnotationFile.load('spec.annotations.yaml')
-
-af.add({
-  selectors: {
-    position: { startLine: 42, startColumn: 1, endLine: 42, endColumn: 60 },
-    quote: { exact: 'Rate limit: 100 requests per minute', prefix: '', suffix: '' },
-  },
-  comment: 'Is 100/min enough? The load test showed spikes of 300/min.',
-  tag: 'question',
-  author: 'Agent',
-})
-
-await af.save('spec.annotations.yaml')
-```
-
-### Interacting via HTTP API (while server is running)
-
-If the server is running (view mode), you can interact without touching the YAML file directly:
-
-```bash
-# Create an annotation
-curl -X POST http://127.0.0.1:3000/api/annotations -H 'Content-Type: application/json' -d '{
-  "file": "spec.md",
-  "action": "add",
-  "data": {
-    "selectors": {
-      "position": { "startLine": 10, "startColumn": 1, "endLine": 10, "endColumn": 40 },
-      "quote": { "exact": "text to annotate", "prefix": "", "suffix": "" }
-    },
-    "comment": "This needs work",
-    "tag": "suggestion",
-    "author": "Agent"
-  }
-}'
-
-# Resolve an annotation
-curl -X POST http://127.0.0.1:3000/api/annotations -H 'Content-Type: application/json' -d '{
-  "file": "spec.md",
-  "action": "resolve",
-  "data": { "id": "a1b2c3d4" }
-}'
-
-# Add a reply
-curl -X POST http://127.0.0.1:3000/api/annotations -H 'Content-Type: application/json' -d '{
-  "file": "spec.md",
-  "action": "reply",
-  "data": { "id": "a1b2c3d4", "author": "Agent", "comment": "Fixed." }
-}'
-
-# Approve a section
-curl -X POST http://127.0.0.1:3000/api/sections -H 'Content-Type: application/json' -d '{
-  "file": "spec.md",
-  "action": "approve",
-  "heading": "Requirements"
-}'
-```
-
-The browser auto-updates when annotations change — the human sees your replies and resolutions in real time.
-
-### Iterative review loop
-
-When the first review produces feedback, fix the issues and re-launch for a second pass:
-
-```
-Round 1:
-  1. Agent writes spec.md
-  2. mdprobe spec.md --once → human annotates 5 bugs, 3 questions
-  3. Agent reads feedback, fixes all 5 bugs, answers 3 questions
-  4. Agent marks all 8 as resolved, adds replies explaining fixes
-
-Round 2:
-  5. Agent re-launches: mdprobe spec.md --once
-  6. Human sees resolved items (greyed out), reviews fixes
-  7. Human adds 1 new nitpick, approves all sections
-  8. Agent reads feedback — 1 nitpick to fix, all sections approved
-  9. Done — proceed to implementation
-```
-
-```javascript
-// After fixing issues from round 1:
-const af = await AnnotationFile.load('spec.annotations.yaml')
-
-// Mark everything as resolved with explanations
-for (const ann of af.getOpen()) {
-  af.addReply(ann.id, {
-    author: 'Agent',
-    comment: 'Addressed in updated spec.',
-  })
-  af.resolve(ann.id)
-}
-await af.save('spec.annotations.yaml')
-
-// Re-launch for round 2
-// exec: mdprobe spec.md --once
-```
-
-## Drift Detection
-
-If you modify the source `.md` after annotations were created, mdprobe warns the human that the source has changed (annotations may be stale). The hash is stored in the YAML:
-
-```yaml
-source_hash: "sha256:abc123..."
-```
-
-## Schema Validation
-
-A JSON Schema is available for validating annotation YAML files:
-
-```javascript
-import schema from '@henryavila/mdprobe/schema.json'
-```
-
 ---
 
-## Recommended Patterns
+## Section Approval
 
-### Pattern: spec review before implementation
+The human can approve or reject each section (heading) of the document via buttons in the browser UI.
 
-```bash
-# 1. Write the spec
-cat > spec.md << 'SPEC'
-# Feature: User Authentication
-## Requirements
-...
-SPEC
+**Cascade behavior:** Approving a parent heading (e.g., H2) automatically approves all child headings (H3, H4, ...) under it. Same for reject and reset.
 
-# 2. Get human review (blocks until done)
-mdprobe spec.md --once
+**Checking approval status:**
 
-# 3. Read feedback
-node -e "
-import { AnnotationFile } from '@henryavila/mdprobe/annotations'
-const af = await AnnotationFile.load('spec.annotations.yaml')
-console.log(JSON.stringify(af.getOpen(), null, 2))
-"
+> mdprobe_annotations({ path: "spec.md" })
+
+The response includes a `sections` array:
+
+```
+sections: [
+  { heading: "Requirements", level: 2, status: "approved" },
+  { heading: "Architecture",  level: 2, status: "rejected" },
+  { heading: "API Design",    level: 3, status: "pending" }
+]
 ```
 
-### Pattern: background viewer while working
-
-```bash
-# Start viewer in background
-mdprobe docs/ --no-open &
-
-# Continue working — browser shows rendered docs with live reload
-# Human reads at their own pace
-```
-
-### Pattern: check if human approved all sections
-
-```javascript
-const af = await AnnotationFile.load('spec.annotations.yaml')
-const pending = af.sections.filter(s => s.status !== 'approved')
-if (pending.length > 0) {
-  console.log('Sections not yet approved:', pending.map(s => s.heading))
-}
-```
+All sections must be `approved` and all annotations resolved before the document is considered fully reviewed.
