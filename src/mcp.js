@@ -8,14 +8,15 @@ import { openBrowser } from './open-browser.js'
 import { AnnotationFile } from './annotations.js'
 import { getConfig } from './config.js'
 import { hashContent } from './hash.js'
-import { discoverExistingServer, joinExistingServer, writeLockFile } from './singleton.js'
+import { discoverExistingServer, joinExistingServer, writeLockFile, computeBuildHash } from './singleton.js'
 
 let httpServerPromise = null
 
 async function getOrCreateServer(port = 3000) {
   if (!httpServerPromise) {
-    // Check for cross-process singleton (e.g. CLI already running)
-    const existing = await discoverExistingServer()
+    const buildHash = await computeBuildHash()
+
+    const existing = await discoverExistingServer(undefined, buildHash)
     if (existing) {
       httpServerPromise = Promise.resolve({
         url: existing.url,
@@ -27,12 +28,13 @@ async function getOrCreateServer(port = 3000) {
         _remote: true,
       })
     } else {
-      httpServerPromise = createServer({ files: [], port, open: false }).then(async (srv) => {
+      httpServerPromise = createServer({ files: [], port, open: false, buildHash }).then(async (srv) => {
         await writeLockFile({
           pid: process.pid,
           port: srv.port,
           url: srv.url,
           startedAt: new Date().toISOString(),
+          buildHash,
         })
         return srv
       })

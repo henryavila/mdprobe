@@ -268,6 +268,7 @@ export async function createServer(options) {
     once = false,
     author,
     onDisconnect,
+    buildHash,
   } = options
 
   // 1. Resolve files (allow empty array for lazy MCP mode)
@@ -292,6 +293,7 @@ export async function createServer(options) {
     once,
     author,
     port: actualPort,
+    buildHash: buildHash || null,
     getOnFinish: () => onFinishCallback,
     broadcast: (msg) => broadcastFn(msg),
     addFiles: (paths) => addFilesFn(paths),
@@ -468,7 +470,7 @@ export async function createServer(options) {
  * @param {string} [ctx.author]
  * @returns {(req: node_http.IncomingMessage, res: node_http.ServerResponse) => void}
  */
-function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port, getOnFinish, broadcast, addFiles }) {
+function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port, buildHash, getOnFinish, broadcast, addFiles }) {
   return async (req, res) => {
     try {
       const parsedUrl = new URL(req.url, `http://${req.headers.host}`)
@@ -716,6 +718,7 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
           port,
           files: resolvedFiles.map(f => node_path.basename(f)),
           uptime: process.uptime(),
+          buildHash,
         })
       }
 
