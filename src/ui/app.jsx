@@ -6,7 +6,8 @@ import { useTheme } from './hooks/useTheme.js'
 import { useAnnotations } from './hooks/useAnnotations.js'
 import { useClientLibs } from './hooks/useClientLibs.js'
 import { files, currentFile, currentHtml, currentToc, author, reviewMode,
-         leftPanelOpen, rightPanelOpen, openAnnotations, sectionStats, driftWarning } from './state/store.js'
+         leftPanelOpen, rightPanelOpen, openAnnotations, sectionStats, driftWarning,
+         orphanedAnnotations } from './state/store.js'
 import { LeftPanel } from './components/LeftPanel.jsx'
 import { RightPanel } from './components/RightPanel.jsx'
 import { Content } from './components/Content.jsx'
@@ -105,7 +106,9 @@ function App() {
       {/* Drift warning banner */}
       {driftWarning.value && (
         <div class="drift-banner">
-          Arquivo modificado desde a ultima revisao. Algumas anotacoes podem estar desalinhadas.
+          {orphanedAnnotations.value.length > 0
+            ? `Arquivo modificado — ${orphanedAnnotations.value.length} anotação(ões) não encontrada(s)`
+            : 'Arquivo modificado desde a ultima revisao. Algumas anotacoes podem estar desalinhadas.'}
           <button class="btn btn-sm" style="margin-left: 8px" onClick={() => driftWarning.value = false}>Dismiss</button>
         </div>
       )}
