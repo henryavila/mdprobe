@@ -98,7 +98,7 @@ describe('Drift banner layout (integration)', () => {
     // Step 4: Verify drift is detected via API
     const annRes = await httpRequest(`${server.url}/api/annotations?path=spec.md`)
     const annData = annRes.json()
-    expect(annData.drift).toBe(true)
+    expect(annData.drift).toBeTruthy()
 
     // Step 5: Verify CSS served by the server handles drift banner
     // Fetch the HTML shell to find the CSS asset path
@@ -134,6 +134,125 @@ describe('Drift banner layout (integration)', () => {
     expect(Number(contentRow[1])).toBeGreaterThan(Number(driftRow[1]))
   })
 
+  it('drift response includes anchorStatus with orphan when annotated text is deleted', async () => {
+    const mdPath = await writeFixture('orphan.md', '# Orphan Test\n\nThis exact text will be annotated.\n\nAnother paragraph.\n')
+    const server = track(await createServer({
+      files: [mdPath],
+      port: 5210,
+      open: false,
+    }))
+
+    const addRes = await httpRequest(`${server.url}/api/annotations`, 'POST', {
+      file: 'orphan.md',
+      action: 'add',
+      data: {
+        selectors: {
+          position: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 40 },
+          quote: { exact: 'This exact text will be annotated.', prefix: '', suffix: '' },
+        },
+        comment: 'Test',
+        tag: 'bug',
+        author: 'Tester',
+      },
+    })
+    expect(addRes.status).toBe(200)
+    const annotationId = addRes.json().annotations[0].id
+
+    await node_fs.writeFile(mdPath, '# Orphan Test\n\nCompletely different content now.\n\nAnother paragraph.\n', 'utf-8')
+    await new Promise(r => setTimeout(r, 300))
+
+    const annRes = await httpRequest(`${server.url}/api/annotations?path=orphan.md`)
+    const data = annRes.json()
+
+    expect(data.drift).toBeTruthy()
+    expect(typeof data.drift).toBe('object')
+    expect(data.drift.anchorStatus).toBeDefined()
+    expect(data.drift.anchorStatus[annotationId]).toBe('orphan')
+  })
+
+  it('drift response shows anchored status when text is moved but still present', async () => {
+    const mdPath = await writeFixture('moved.md', '# Moved Test\n\nOriginal text here.\n')
+    const server = track(await createServer({
+      files: [mdPath],
+      port: 5211,
+      open: false,
+    }))
+
+    const addRes = await httpRequest(`${server.url}/api/annotations`, 'POST', {
+      file: 'moved.md',
+      action: 'add',
+      data: {
+        selectors: {
+          position: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 20 },
+          quote: { exact: 'Original text here.', prefix: '', suffix: '' },
+        },
+        comment: 'Test',
+        tag: 'question',
+        author: 'Tester',
+      },
+    })
+    expect(addRes.status).toBe(200)
+    const annotationId = addRes.json().annotations[0].id
+
+    await node_fs.writeFile(mdPath, '# Moved Test\n\nNew line 1.\n\nNew line 2.\n\nOriginal text here.\n', 'utf-8')
+    await new Promise(r => setTimeout(r, 300))
+
+    const annRes = await httpRequest(`${server.url}/api/annotations?path=moved.md`)
+    const data = annRes.json()
+
+    expect(data.drift).toBeTruthy()
+    expect(typeof data.drift).toBe('object')
+    expect(data.drift.anchorStatus[annotationId]).toBe('anchored')
+  })
+
+  it('WebSocket broadcasts drift with anchorStatus when file changes', async () => {
+    const mdPath = await writeFixture('ws-drift.md', '# WS Test\n\nAnnotated text here.\n')
+    const server = track(await createServer({
+      files: [mdPath],
+      port: 5212,
+      open: false,
+    }))
+
+    // Add annotation
+    await httpRequest(`${server.url}/api/annotations`, 'POST', {
+      file: 'ws-drift.md',
+      action: 'add',
+      data: {
+        selectors: {
+          position: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 22 },
+          quote: { exact: 'Annotated text here.', prefix: '', suffix: '' },
+        },
+        comment: 'WS test',
+        tag: 'bug',
+        author: 'Tester',
+      },
+    })
+
+    // Connect WebSocket and listen for drift message
+    const WebSocket = (await import('ws')).default
+    const ws = new WebSocket(`ws://127.0.0.1:5212/ws`)
+    const messages = []
+
+    await new Promise((resolve) => { ws.on('open', resolve) })
+    ws.on('message', (data) => { messages.push(JSON.parse(data.toString())) })
+
+    // Modify file — delete annotated text to create orphan
+    await node_fs.writeFile(mdPath, '# WS Test\n\nTotally different content.\n', 'utf-8')
+
+    // Wait for debounce + processing
+    await new Promise(r => setTimeout(r, 500))
+
+    ws.close()
+
+    // Find drift message
+    const driftMsg = messages.find(m => m.type === 'drift')
+    expect(driftMsg).toBeDefined()
+    expect(driftMsg.anchorStatus).toBeDefined()
+    // The annotation's text was deleted → orphan
+    const statuses = Object.values(driftMsg.anchorStatus)
+    expect(statuses).toContain('orphan')
+  })
+
   it('layout is correct when there is no drift (no banner in DOM)', async () => {
     // Start server, do NOT create annotations → no sidecar → no drift
     const mdPath = await writeFixture('clean.md', '# Clean\n\nNo annotations here.\n')
@@ -157,5 +276,52 @@ describe('Drift banner layout (integration)', () => {
 
     // 4 rows: 48px auto 1fr 32px — the auto row collapses when banner absent
     expect(rowTracks).toEqual(['48px', 'auto', '1fr', '32px'])
+  })
+
+  it('no drift field when file has no annotations', async () => {
+    const mdPath = await writeFixture('nodrift.md', '# No Drift\n\nClean file.\n')
+    const server = track(await createServer({
+      files: [mdPath],
+      port: 5213,
+      open: false,
+    }))
+
+    const res = await httpRequest(`${server.url}/api/annotations?path=nodrift.md`)
+    const data = res.json()
+
+    expect(data.drift).toBeFalsy()
+  })
+
+  it('drift object is truthy for backward compatibility', async () => {
+    const mdPath = await writeFixture('compat.md', '# Compat\n\nSome text.\n')
+    const server = track(await createServer({
+      files: [mdPath],
+      port: 5214,
+      open: false,
+    }))
+
+    await httpRequest(`${server.url}/api/annotations`, 'POST', {
+      file: 'compat.md',
+      action: 'add',
+      data: {
+        selectors: {
+          position: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 10 },
+          quote: { exact: 'Some text.', prefix: '', suffix: '' },
+        },
+        comment: 'Test',
+        tag: 'bug',
+        author: 'Tester',
+      },
+    })
+
+    await node_fs.writeFile(mdPath, '# Compat\n\nChanged.\n', 'utf-8')
+    await new Promise(r => setTimeout(r, 300))
+
+    const res = await httpRequest(`${server.url}/api/annotations?path=compat.md`)
+    const data = res.json()
+
+    // Object is truthy — backward compatible with `if (data.drift)`
+    expect(data.drift).toBeTruthy()
+    expect(typeof data.drift).toBe('object')
   })
 })

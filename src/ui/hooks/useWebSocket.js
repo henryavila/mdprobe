@@ -7,6 +7,7 @@ import {
   annotations,
   sections,
   driftWarning,
+  anchorStatus,
 } from '../state/store.js'
 
 const RECONNECT_DELAY_MS = 2000
@@ -84,6 +85,9 @@ export function useWebSocket() {
 
         case 'drift':
           driftWarning.value = msg.warning || true
+          if (msg.anchorStatus) {
+            anchorStatus.value = msg.anchorStatus
+          }
           break
 
         case 'error':
