@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks'
 import { rightPanelOpen, filteredAnnotations, selectedAnnotationId, showResolved,
          filterTag, filterAuthor, uniqueTags, uniqueAuthors, openAnnotations,
-         anchoredAnnotations, orphanedAnnotations, anchorStatus } from '../state/store.js'
+         anchoredAnnotations, orphanedAnnotations, driftWarning } from '../state/store.js'
 import { AnnotationForm } from './AnnotationForm.jsx'
 import { ReplyThread } from './ReplyThread.jsx'
 
@@ -71,7 +71,7 @@ export function RightPanel({ annotationOps }) {
               </div>
             ) : (
               <>
-                {anchoredAnnotations.value.length === 0 && filteredAnnotations.value.length > 0 ? (
+                {anchoredAnnotations.value.length === 0 && orphanedAnnotations.value.length === 0 && filteredAnnotations.value.length > 0 ? (
                   <div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px">
                     No annotations
                   </div>
@@ -89,7 +89,7 @@ export function RightPanel({ annotationOps }) {
                   ))
                 )}
 
-                {orphanedAnnotations.value.length > 0 && (
+                {driftWarning.value && orphanedAnnotations.value.length > 0 && (
                   <OrphanedSection
                     annotations={orphanedAnnotations.value}
                     selectedAnnotationId={selectedAnnotationId.value}
