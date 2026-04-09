@@ -44,4 +44,19 @@ describe('SKILL.md content validation', () => {
     content = content ?? await readFile(SKILL_PATH, 'utf-8')
     expect(content).toMatch(/findings|analysis|validation/i)
   })
+
+  it('frontmatter description leads with use case, not mechanism', async () => {
+    content = content ?? await readFile(SKILL_PATH, 'utf-8')
+    const frontmatter = content.split('---')[1]
+    // Description must start with an action verb (Preview/Visualize/Review), not a noun
+    expect(frontmatter).toMatch(/description:\s*(?:>-?\s*)?Preview|Visualize|Review/i)
+  })
+
+  it('frontmatter contains trigger keywords for discoverability', async () => {
+    content = content ?? await readFile(SKILL_PATH, 'utf-8')
+    const frontmatter = content.split('---')[1]
+    expect(frontmatter).toMatch(/preview/i)
+    expect(frontmatter).toMatch(/visualize/i)
+    expect(frontmatter).toMatch(/validate/i)
+  })
 })
