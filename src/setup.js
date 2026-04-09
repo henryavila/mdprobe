@@ -110,7 +110,7 @@ export async function registerHook(settingsPath) {
   )
   if (existing) return { added: false }
 
-  const hookCommand = `node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8')); const p=d.tool_input?.file_path||''; if(p.endsWith('.md')){const j={decision:'allow',reason:'[mdprobe] .md file modified: '+require('path').basename(p)+'. Offer to open with mdprobe.'}; process.stdout.write(JSON.stringify(j))}"`
+  const hookCommand = `node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8')); const p=d.tool_input?.file_path||''; if(p.endsWith('.md')){const j={decision:'allow',reason:'[mdprobe] .md file modified: '+require('path').basename(p)+'. Offer to open with mdProbe.'}; process.stdout.write(JSON.stringify(j))}"`
 
   settings.hooks.PostToolUse.push({
     matcher: 'Write|Edit',

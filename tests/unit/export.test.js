@@ -367,12 +367,12 @@ describe('exportSARIF()', () => {
     expect(result.runs.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('run has tool with name "mdprobe"', () => {
+  it('run has tool with name "mdProbe"', () => {
     const result = exportSARIF(af, sourceFilePath)
     const run = result.runs[0]
     expect(run).toHaveProperty('tool')
     expect(run.tool).toHaveProperty('driver')
-    expect(run.tool.driver).toHaveProperty('name', 'mdprobe')
+    expect(run.tool.driver).toHaveProperty('name', 'mdProbe')
   })
 
   it('run has results array', () => {

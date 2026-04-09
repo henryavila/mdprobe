@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "mdprobe annotation sidecar",
-  "description": "Schema for YAML sidecar annotation files used by mdprobe",
+  "title": "mdProbe annotation sidecar",
+  "description": "Schema for YAML sidecar annotation files used by mdProbe",
   "type": "object",
   "required": ["version", "source", "source_hash", "annotations"],
   "properties": {

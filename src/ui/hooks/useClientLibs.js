@@ -69,7 +69,7 @@ async function initMermaid(elements) {
     }
     await window.mermaid.run({ nodes: [...elements] })
   } catch (err) {
-    console.warn('mdprobe: Mermaid rendering failed', err)
+    console.warn('mdProbe: Mermaid rendering failed', err)
   }
 }
 
@@ -92,6 +92,6 @@ async function initKaTeX(elements) {
       }
     }
   } catch (err) {
-    console.warn('mdprobe: KaTeX rendering failed', err)
+    console.warn('mdProbe: KaTeX rendering failed', err)
   }
 }
