@@ -690,15 +690,8 @@ describe('Config edge cases', () => {
     expect(result.stdout.trim()).toBe('myvalue')
   })
 
-  it('install --plugin installs the skill file', async () => {
-    const result = await run(['install', '--plugin'])
+  it('setup --yes runs non-interactive setup', async () => {
+    const result = await run(['setup', '--yes', '--author', 'Test'])
     expect(result.code).toBe(0)
-    expect(result.stdout).toMatch(/plugin installed|SKILL\.md/i)
-  })
-
-  it('install without --plugin shows usage error', async () => {
-    const result = await run(['install'])
-    expect(result.code).not.toBe(0)
-    expect(result.stderr).toMatch(/usage|--plugin/i)
   })
 })
