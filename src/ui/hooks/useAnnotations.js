@@ -1,4 +1,4 @@
-import { annotations, sections, currentFile, author, driftWarning, sectionLevel } from '../state/store.js'
+import { annotations, sections, currentFile, author, driftWarning, sectionLevel, anchorStatus } from '../state/store.js'
 
 const API_BASE = '' // same origin
 
@@ -25,6 +25,11 @@ export function useAnnotations() {
     sections.value = data.sections || []
     if (data.sectionLevel != null) sectionLevel.value = data.sectionLevel
     driftWarning.value = data.drift || false
+    if (data.drift && typeof data.drift === 'object') {
+      anchorStatus.value = data.drift.anchorStatus || {}
+    } else {
+      anchorStatus.value = {}
+    }
     return data
   }
 
