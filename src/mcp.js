@@ -1,8 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { resolve, basename } from 'node:path'
-import { readFile } from 'node:fs/promises'
+import { resolve, basename, dirname } from 'node:path'
+import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { createServer } from './server.js'
 import { openBrowser } from './open-browser.js'
 import { AnnotationFile } from './annotations.js'
@@ -47,6 +47,29 @@ function buildUrl(port, urlStyle, filePath) {
   return `http://${host}:${port}${suffix}`
 }
 
+export function validateViewParams(params) {
+  const hasPaths = Array.isArray(params.paths) && params.paths.length > 0
+  const hasContent = typeof params.content === 'string' && params.content.length > 0
+
+  if (hasPaths && hasContent) {
+    return { error: 'Cannot provide both paths and content. Use one or the other.' }
+  }
+  if (!hasPaths && !hasContent) {
+    return { error: 'Either paths or content must be provided.' }
+  }
+  if (hasContent && !params.filename) {
+    return { error: 'filename is required when content is provided.' }
+  }
+  return { mode: hasPaths ? 'paths' : 'content' }
+}
+
+export async function saveContentToFile(content, filename) {
+  const absPath = resolve(filename)
+  await mkdir(dirname(absPath), { recursive: true })
+  await writeFile(absPath, content, 'utf-8')
+  return { savedTo: absPath }
+}
+
 export async function startMcpServer() {
   const config = await getConfig()
   const author = config.author || 'Agent'
@@ -58,24 +81,46 @@ export async function startMcpServer() {
   })
 
   server.registerTool('mdprobe_view', {
-    description: 'Open markdown files in the browser for viewing or review',
+    description: 'Open content for human review in the browser. Call this BEFORE asking for feedback on any content >20 lines — findings, specs, plans, analysis, or any long output.',
     inputSchema: z.object({
-      paths: z.array(z.string()).describe('Paths to .md files (relative or absolute)'),
+      paths: z.array(z.string()).optional().describe('Paths to .md files (relative or absolute)'),
+      content: z.string().optional().describe('Raw markdown content to save and open'),
+      filename: z.string().optional().describe('Filename to save content to (required with content)'),
       open: z.boolean().optional().default(true).describe('Auto-open browser'),
     }),
-  }, async ({ paths, open }) => {
+  }, async (params) => {
+    const validation = validateViewParams(params)
+    if (validation.error) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ error: validation.error }) }],
+        isError: true,
+      }
+    }
+
     const srv = await getOrCreateServer()
-    const resolved = paths.map(p => resolve(p))
+    let resolved
+    let savedTo
+
+    if (validation.mode === 'content') {
+      const result = await saveContentToFile(params.content, params.filename)
+      savedTo = result.savedTo
+      resolved = [savedTo]
+    } else {
+      resolved = params.paths.map(p => resolve(p))
+    }
+
     srv.addFiles(resolved)
 
-    // Fix #7: single-file URL includes file path; multi-file returns base URL
     const url = resolved.length === 1
       ? buildUrl(srv.port, urlStyle, basename(resolved[0]))
       : buildUrl(srv.port, urlStyle)
-    if (open) await openBrowser(url).catch(() => {})
+    if (params.open) await openBrowser(url).catch(() => {})
+
+    const response = { url, files: resolved.map(p => basename(p)) }
+    if (savedTo) response.savedTo = savedTo
 
     return {
-      content: [{ type: 'text', text: JSON.stringify({ url, files: resolved.map(p => basename(p)) }) }],
+      content: [{ type: 'text', text: JSON.stringify(response) }],
     }
   })
 
