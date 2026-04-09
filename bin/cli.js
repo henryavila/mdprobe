@@ -197,9 +197,9 @@ async function main() {
 
   // ---- Serve mode (default) ----
 
-  // Check if author is configured; prompt if missing
+  // Check if author is configured; prompt if missing (only in interactive terminals)
   let currentAuthor = await getAuthor()
-  if (currentAuthor === 'anonymous') {
+  if (currentAuthor === 'anonymous' && process.stdin.isTTY) {
     const { createInterface } = await import('node:readline')
     const rl = createInterface({ input: process.stdin, output: process.stdout })
     const name = await new Promise(resolve => {
