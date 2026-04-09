@@ -173,7 +173,7 @@ body {
 #app {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  grid-template-rows: 48px 1fr 32px;
+  grid-template-rows: 48px auto 1fr 32px;
   height: 100vh;
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -183,6 +183,7 @@ body {
    Header bar (row 1, spans all columns)
    -------------------------------------------------------------------------- */
 .header {
+  grid-row: 1;
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
@@ -203,6 +204,7 @@ body {
    Left panel
    -------------------------------------------------------------------------- */
 .left-panel {
+  grid-row: 3;
   width: var(--panel-width);
   transition: width 0.2s ease;
   overflow: hidden;
@@ -241,6 +243,7 @@ body {
    Right panel
    -------------------------------------------------------------------------- */
 .right-panel {
+  grid-row: 3;
   width: var(--panel-width);
   transition: width 0.2s ease;
   overflow: hidden;
@@ -300,6 +303,7 @@ body {
    Content area
    -------------------------------------------------------------------------- */
 .content-area-wrapper {
+  grid-row: 3;
   overflow-y: auto;
   min-width: 0;
 }
@@ -657,6 +661,7 @@ body {
    Status bar (row 3, spans all columns)
    -------------------------------------------------------------------------- */
 .status-bar {
+  grid-row: 4;
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
@@ -1113,6 +1118,8 @@ body {
    Drift warning banner
    -------------------------------------------------------------------------- */
 .drift-banner {
+  grid-row: 2;
+  grid-column: 1 / -1;
   padding: 8px 16px;
   background: var(--tag-question);
   color: white;
@@ -1120,7 +1127,6 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  grid-column: 1 / -1;
 }
 
 .drift-banner .dismiss {
