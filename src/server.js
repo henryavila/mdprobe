@@ -501,13 +501,17 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
         return sendHTML(res, 200, SHELL_HTML)
       }
 
-      // GET /api/files
+      // GET /api/files — deduplicate by basename (first occurrence wins)
       if (req.method === 'GET' && pathname === '/api/files') {
-        const fileList = resolvedFiles.map((absPath) => ({
-          path: node_path.basename(absPath),
-          absPath,
-          label: node_path.basename(absPath, '.md'),
-        }))
+        const seen = new Set()
+        const fileList = []
+        for (const absPath of resolvedFiles) {
+          const base = node_path.basename(absPath)
+          if (!seen.has(base)) {
+            seen.add(base)
+            fileList.push({ path: base, absPath, label: node_path.basename(absPath, '.md') })
+          }
+        }
         return sendJSON(res, 200, fileList)
       }
 

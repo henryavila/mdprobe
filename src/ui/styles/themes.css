@@ -295,8 +295,11 @@ body {
 
 .panel-content {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 4px 8px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* --------------------------------------------------------------------------
@@ -750,6 +753,23 @@ body {
 
 .section-status-label.approved { color: var(--status-approved); }
 .section-status-label.rejected { color: var(--status-rejected); }
+
+/* --------------------------------------------------------------------------
+   File list section (constrained height so TOC gets priority)
+   -------------------------------------------------------------------------- */
+.file-list-section {
+  padding: 0 8px 8px;
+  max-height: 35%;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.toc-section {
+  padding: 0 8px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
 
 /* --------------------------------------------------------------------------
    File list items
