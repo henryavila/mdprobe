@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os'
 import node_http from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { hashContent } from './hash.js'
+import { createLogger } from './telemetry.js'
+
+const tel = createLogger('singleton')
 
 const __filename = fileURLToPath(import.meta.url)
 const DIST_INDEX = join(dirname(__filename), '..', 'dist', 'index.html')
@@ -51,6 +54,7 @@ export async function readLockFile(lockPath = DEFAULT_LOCK_PATH) {
  */
 export async function writeLockFile(data, lockPath = DEFAULT_LOCK_PATH) {
   await writeFile(lockPath, JSON.stringify(data), 'utf-8')
+  tel.log('lock_write', { pid: data.pid, port: data.port, buildHash: data.buildHash })
 }
 
 /**
@@ -58,6 +62,7 @@ export async function writeLockFile(data, lockPath = DEFAULT_LOCK_PATH) {
  * @param {string} [lockPath]
  */
 export async function removeLockFile(lockPath = DEFAULT_LOCK_PATH) {
+  tel.log('lock_remove', { trigger: 'async' })
   try {
     await unlink(lockPath)
   } catch (err) {
@@ -70,6 +75,7 @@ export async function removeLockFile(lockPath = DEFAULT_LOCK_PATH) {
  * @param {string} [lockPath]
  */
 export function removeLockFileSync(lockPath = DEFAULT_LOCK_PATH) {
+  tel.log('lock_remove', { trigger: 'sync' })
   try {
     unlinkSync(lockPath)
   } catch { /* ignore */ }
@@ -127,31 +133,55 @@ export function pingServer(url, timeout = 2000) {
  */
 export async function discoverExistingServer(lockPath = DEFAULT_LOCK_PATH, currentBuildHash) {
   const lock = await readLockFile(lockPath)
-  if (!lock) return null
+  tel.log('lock_read', { found: !!lock, lockPid: lock?.pid, lockPort: lock?.port, buildHash: lock?.buildHash })
+  if (!lock) {
+    tel.log('discover', { found: false })
+    return null
+  }
 
   // Reject lock files without buildHash when we have one (backward compat)
   if (currentBuildHash && !lock.buildHash) {
+    tel.log('hash_check', { match: false, local: currentBuildHash, remote: lock.buildHash })
+    tel.log('lock_stale', { reason: 'hash_mismatch', lockPid: lock.pid })
     await removeLockFile(lockPath)
+    tel.log('discover', { found: false })
     return null
   }
 
   // Reject lock files with different buildHash (stale server)
   if (currentBuildHash && lock.buildHash !== currentBuildHash) {
+    tel.log('hash_check', { match: false, local: currentBuildHash, remote: lock.buildHash })
+    tel.log('lock_stale', { reason: 'hash_mismatch', lockPid: lock.pid })
     await removeLockFile(lockPath)
+    tel.log('discover', { found: false })
     return null
   }
 
-  if (!isProcessAlive(lock.pid)) {
-    await removeLockFile(lockPath)
-    return null
+  if (currentBuildHash) {
+    tel.log('hash_check', { match: true, local: currentBuildHash, remote: lock.buildHash })
   }
 
-  const { alive } = await pingServer(lock.url)
+  const alive = isProcessAlive(lock.pid)
+  tel.log('process_alive', { lockPid: lock.pid, alive })
   if (!alive) {
+    tel.log('lock_stale', { reason: 'no_process', lockPid: lock.pid })
     await removeLockFile(lockPath)
+    tel.log('discover', { found: false })
     return null
   }
 
+  const start = Date.now()
+  const { alive: pingAlive } = await pingServer(lock.url)
+  const ms = Date.now() - start
+  tel.log('ping', { url: lock.url, ok: pingAlive, ms })
+  if (!pingAlive) {
+    tel.log('lock_stale', { reason: 'no_ping', lockPid: lock.pid })
+    await removeLockFile(lockPath)
+    tel.log('discover', { found: false })
+    return null
+  }
+
+  tel.log('discover', { found: true, url: lock.url, port: lock.port })
   return { url: lock.url, port: lock.port }
 }
 
@@ -162,6 +192,7 @@ export async function discoverExistingServer(lockPath = DEFAULT_LOCK_PATH, curre
  * @returns {Promise<{ok: boolean, files?: string[], added?: string[]}>}
  */
 export function joinExistingServer(url, files) {
+  tel.log('join', { url, filesAdded: files.length })
   return new Promise((resolve) => {
     const body = JSON.stringify({ files })
     const parsed = new URL(`${url}/api/add-files`)
@@ -221,11 +252,18 @@ export function registerShutdownHandlers(serverObj, lockPath = DEFAULT_LOCK_PATH
     process.exit(0)
   }
 
-  process.on('SIGINT', shutdown)
-  process.on('SIGTERM', shutdown)
+  process.on('SIGINT', () => {
+    tel.log('shutdown', { signal: 'SIGINT' })
+    shutdown()
+  })
+  process.on('SIGTERM', () => {
+    tel.log('shutdown', { signal: 'SIGTERM' })
+    shutdown()
+  })
 
   // Synchronous last-resort cleanup on exit
   process.on('exit', () => {
+    tel.log('shutdown', { signal: 'exit' })
     removeLockFileSync(lockPath)
   })
 }
