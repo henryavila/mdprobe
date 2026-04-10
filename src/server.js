@@ -421,7 +421,7 @@ export async function createServer(options) {
               ),
             })
           }
-        } catch (err) { tel.log('error', { fn: 'watcher.driftCheck', error: err.message }) }
+        } catch (err) { if (err.code !== 'ENOENT') tel.log('error', { fn: 'watcher.driftCheck', error: err.message }) }
       } catch (err) {
         broadcastToAll({
           type: 'error',
@@ -574,7 +574,7 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
                 )
               }
             }
-          } catch (err) { tel.log('error', { fn: 'annotations.driftCheck', error: err.message }) }
+          } catch (err) { if (err.code !== 'ENOENT') tel.log('error', { fn: 'annotations.driftCheck', error: err.message }) }
         } catch {
           // No sidecar or unreadable
           json = {
@@ -799,7 +799,7 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
           try {
             await node_fs.stat(sidecar)
             yamlPaths.push(sidecar)
-          } catch (err) { tel.log('error', { fn: 'reviewFinish.sidecarStat', error: err.message }) }
+          } catch { /* no sidecar — expected for files without annotations */ }
         }
         const onFinish = getOnFinish()
         if (typeof onFinish === 'function') {

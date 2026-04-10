@@ -51,9 +51,13 @@ async function resolveEnabled() {
   // 2. Check config file
   try {
     const config = await getConfig()
-    if (typeof config.telemetry === 'boolean') {
-      _enabledCache = config.telemetry
-      return _enabledCache
+    if (config.telemetry === true || config.telemetry === 'true') {
+      _enabledCache = true
+      return true
+    }
+    if (config.telemetry === false || config.telemetry === 'false') {
+      _enabledCache = false
+      return false
     }
   } catch {
     // Config read failure — fall through to default

@@ -372,7 +372,9 @@ async function main() {
       url: server.url,
       startedAt: new Date().toISOString(),
     })
-    registerShutdownHandlers(server)
+    registerShutdownHandlers(server, undefined, () => {
+      tel.log('exit', { code: 0, reason: 'shutdown' })
+    })
 
     console.log(`Server listening at ${server.url}`)
     if (!noOpenFlag) {

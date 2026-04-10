@@ -121,8 +121,12 @@ export async function startMcpServer() {
     const url = resolved.length === 1
       ? buildUrl(srv.port, urlStyle, basename(resolved[0]))
       : buildUrl(srv.port, urlStyle)
-    tel.log('browser_open', { url, requested: params.open, suppressed: !params.open })
-    if (params.open) await openBrowser(url).catch((err) => { tel.log('error', { fn: 'openBrowser', error: err.message }) })
+    if (params.open) {
+      tel.log('browser_open', { url })
+      await openBrowser(url).catch((err) => { tel.log('error', { fn: 'openBrowser', error: err.message }) })
+    } else {
+      tel.log('browser_skip', { url })
+    }
 
     const response = { url, files: resolved.map(p => basename(p)) }
     if (savedTo) response.savedTo = savedTo

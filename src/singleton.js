@@ -238,8 +238,9 @@ let shuttingDown = false
  * Register signal handlers to clean up lock file and close server on exit.
  * @param {{close: Function}} serverObj
  * @param {string} [lockPath]
+ * @param {Function} [onShutdown] - Optional callback invoked before process.exit
  */
-export function registerShutdownHandlers(serverObj, lockPath = DEFAULT_LOCK_PATH) {
+export function registerShutdownHandlers(serverObj, lockPath = DEFAULT_LOCK_PATH, onShutdown) {
   shuttingDown = false
 
   async function shutdown() {
@@ -252,6 +253,7 @@ export function registerShutdownHandlers(serverObj, lockPath = DEFAULT_LOCK_PATH
       await serverObj.close()
     } catch { /* ignore */ }
 
+    if (onShutdown) onShutdown()
     process.exit(0)
   }
 
