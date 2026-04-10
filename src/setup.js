@@ -3,6 +3,9 @@ import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { createLogger } from './telemetry.js'
+
+const tel = createLogger('setup')
 
 const __filename = fileURLToPath(import.meta.url)
 const PROJECT_ROOT = join(dirname(__filename), '..')
@@ -29,10 +32,12 @@ export async function detectIDEs(overrideConfigs) {
     try {
       await access(config.detectDir)
       detected.push(name)
+      tel.log('detect', { ide: name, detectDir: config.detectDir, exists: true })
     } catch {
-      // IDE not installed
+      tel.log('detect', { ide: name, detectDir: config.detectDir, exists: false })
     }
   }
+  tel.log('detect_result', { detected })
   return detected
 }
 
@@ -56,6 +61,7 @@ export async function installSkill(ide, content, overrideConfigs) {
   await mkdir(destDir, { recursive: true })
   const destPath = join(destDir, 'SKILL.md')
   await writeFile(destPath, content, 'utf-8')
+  tel.log('install_skill', { ide, path: destPath })
   return destPath
 }
 
@@ -70,8 +76,10 @@ export async function registerMCP() {
       'mcp', 'add', '--scope', 'user', '--transport', 'stdio',
       'mdprobe', '--', 'mdprobe', 'mcp',
     ])
+    tel.log('register_mcp', { method: 'cli' })
     return { method: 'cli' }
-  } catch {
+  } catch (err) {
+    tel.log('error', { fn: 'registerMCP', error: err.message })
     // Fallback: write directly to ~/.claude.json
     const claudeJsonPath = join(homedir(), '.claude.json')
     let config = {}
@@ -87,6 +95,7 @@ export async function registerMCP() {
     }
 
     await writeFile(claudeJsonPath, JSON.stringify(config, null, 2), 'utf-8')
+    tel.log('register_mcp', { method: 'file' })
     return { method: 'file' }
   }
 }
@@ -113,7 +122,10 @@ export async function registerHook(settingsPath) {
   const existing = settings.hooks.PostToolUse.find(h =>
     h.hooks?.some(hh => typeof hh.command === 'string' && hh.command.includes('[mdprobe]'))
   )
-  if (existing) return { added: false }
+  if (existing) {
+    tel.log('register_hook', { added: false })
+    return { added: false }
+  }
 
   const hookCommand = `node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8')); const p=d.tool_input?.file_path||''; if(p.endsWith('.md')){const j={decision:'allow',reason:'[mdprobe] .md file modified: '+require('path').basename(p)+'. Offer to open with mdProbe.'}; process.stdout.write(JSON.stringify(j))}"`
 
@@ -124,6 +136,7 @@ export async function registerHook(settingsPath) {
 
   await mkdir(dirname(settingsPath), { recursive: true })
   await writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8')
+  tel.log('register_hook', { added: true })
   return { added: true }
 }
 
