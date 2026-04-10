@@ -145,9 +145,8 @@ describe('Argument parsing', () => {
     const mdPath = join(tmpDir, 'doc.md')
     await writeFile(mdPath, '# Hello\n', 'utf8')
 
-    const cli = spawnCli([mdPath])
+    const cli = spawnCli([mdPath, '--port', '0'])
     try {
-      // Server should start and print a URL or "listening" message
       await cli.waitForOutput(/listening|http|started|serving/i, 4000)
       const output = cli.getStdout() + cli.getStderr()
       expect(output).toMatch(/listening|http|started|serving/i)
@@ -160,7 +159,7 @@ describe('Argument parsing', () => {
     await writeFile(join(tmpDir, 'a.md'), '# A\n', 'utf8')
     await writeFile(join(tmpDir, 'b.md'), '# B\n', 'utf8')
 
-    const cli = spawnCli([tmpDir])
+    const cli = spawnCli([tmpDir, '--port', '0'])
     try {
       await cli.waitForOutput(/listening|http|started|serving/i, 4000)
       const output = cli.getStdout() + cli.getStderr()
@@ -176,7 +175,7 @@ describe('Argument parsing', () => {
     await writeFile(a, '# A\n', 'utf8')
     await writeFile(b, '# B\n', 'utf8')
 
-    const cli = spawnCli([a, b])
+    const cli = spawnCli([a, b, '--port', '0'])
     try {
       await cli.waitForOutput(/listening|http|started|serving/i, 4000)
       const output = cli.getStdout() + cli.getStderr()
@@ -189,7 +188,7 @@ describe('Argument parsing', () => {
   it('no arguments triggers serve mode with cwd', async () => {
     await writeFile(join(tmpDir, 'readme.md'), '# README\n', 'utf8')
 
-    const cli = spawnCli([], { cwd: tmpDir })
+    const cli = spawnCli(['--port', '0'], { cwd: tmpDir })
     try {
       await cli.waitForOutput(/listening|http|started|serving/i, 4000)
       const output = cli.getStdout() + cli.getStderr()
