@@ -107,8 +107,8 @@ function App() {
       {driftWarning.value && (
         <div class="drift-banner">
           {orphanedAnnotations.value.length > 0
-            ? `Arquivo modificado — ${orphanedAnnotations.value.length} anotação(ões) não encontrada(s)`
-            : 'Arquivo modificado desde a ultima revisao. Algumas anotacoes podem estar desalinhadas.'}
+            ? `File modified — ${orphanedAnnotations.value.length} annotation(s) not found`
+            : 'File modified since last review. Some annotations may be misaligned.'}
           <button class="btn btn-sm" style="margin-left: 8px" onClick={() => driftWarning.value = false}>Dismiss</button>
         </div>
       )}

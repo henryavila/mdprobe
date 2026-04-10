@@ -45,6 +45,19 @@ describe('SKILL.md content validation', () => {
     expect(content).toMatch(/findings|analysis|validation/i)
   })
 
+  it('Rule 1 does NOT auto-trigger on every .md mention (caused unwanted server launches)', async () => {
+    content = content ?? await readFile(SKILL_PATH, 'utf-8')
+    // "Whenever you mention a .md file" caused the AI to call mdprobe_view
+    // for every .md file reference, even during routine edits
+    expect(content).not.toMatch(/whenever you mention/i)
+  })
+
+  it('Rule 1 still triggers for files the human should read (core purpose)', async () => {
+    content = content ?? await readFile(SKILL_PATH, 'utf-8')
+    // Must keep the proactive behavior: open files the human should READ
+    expect(content).toMatch(/human.*(should|needs to) read|produce.*present.*deliver/i)
+  })
+
   it('frontmatter description leads with use case, not mechanism', async () => {
     content = content ?? await readFile(SKILL_PATH, 'utf-8')
     const frontmatter = content.split('---')[1]

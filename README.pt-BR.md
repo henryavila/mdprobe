@@ -4,6 +4,8 @@
 
 Visualizador e revisor de markdown com live reload, anotações persistentes e integração com agentes de IA.
 
+[🇺🇸 Read in English](README.md)
+
 Abra arquivos `.md` no browser, anote inline, aprove seções e exporte feedback estruturado em YAML — tudo pelo terminal.
 
 ---

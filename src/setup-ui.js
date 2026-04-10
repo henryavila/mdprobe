@@ -6,6 +6,7 @@ import {
   detectIDEs, installSkill, registerMCP,
   registerHook, saveConfig, removeAll,
 } from './setup.js'
+import { getConfig } from './config.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const PROJECT_ROOT = join(dirname(__filename), '..')
@@ -13,7 +14,7 @@ const pkg = JSON.parse(readFileSync(join(PROJECT_ROOT, 'package.json'), 'utf-8')
 
 function bail(value) {
   if (isCancel(value)) {
-    outro('Setup cancelado.')
+    outro('Setup cancelled.')
     process.exit(0)
   }
   return value
@@ -29,20 +30,22 @@ export async function runSetup(args) {
 
   if (isRemove) {
     const s = spinner()
-    s.start('Removendo mdProbe...')
+    s.start('Removing mdProbe...')
     const removed = await removeAll()
-    s.stop(`Removido: ${removed.length > 0 ? removed.join(', ') : 'nada encontrado'}`)
+    s.stop(`Removed: ${removed.length > 0 ? removed.join(', ') : 'nothing found'}`)
     return
   }
 
+  const currentConfig = await getConfig()
+
   if (isNonInteractive) {
-    const author = authorFlag || 'anonymous'
-    const urlStyle = 'localhost'
-    const enableTelemetry = args.includes('--telemetry')
+    const author = authorFlag || currentConfig.author || 'anonymous'
+    const urlStyle = currentConfig.urlStyle || 'localhost'
+    const enableTelemetry = args.includes('--telemetry') || (currentConfig.telemetry === true)
     const ides = await detectIDEs()
 
     const s = spinner()
-    s.start('Instalando...')
+    s.start('Installing...')
 
     for (const ide of ides) {
       await installSkill(ide)
@@ -51,8 +54,8 @@ export async function runSetup(args) {
     await registerHook()
     await saveConfig({ author, urlStyle, telemetry: enableTelemetry })
 
-    s.stop('Instalado com sucesso')
-    console.log(`  IDEs: ${ides.length > 0 ? ides.join(', ') : 'nenhum detectado'}`)
+    s.stop('Installed successfully')
+    console.log(`  IDEs: ${ides.length > 0 ? ides.join(', ') : 'none detected'}`)
     console.log(`  Author: ${author}`)
     return
   }
@@ -61,33 +64,35 @@ export async function runSetup(args) {
   intro(`mdProbe v${pkg.version} — setup`)
 
   const author = bail(await text({
-    message: 'Seu nome para anotacoes:',
-    placeholder: 'anonymous',
+    message: 'Your name for annotations:',
+    defaultValue: currentConfig.author || undefined,
+    placeholder: currentConfig.author || 'anonymous',
     validate: () => undefined,
-  })) || 'anonymous'
+  })) || currentConfig.author || 'anonymous'
 
   const urlStyle = bail(await select({
-    message: 'Estilo de URL:',
+    message: 'URL style:',
+    initialValue: currentConfig.urlStyle || 'localhost',
     options: [
       { value: 'mdprobe.localhost', label: 'mdprobe.localhost', hint: 'Chrome/Firefox/Edge' },
-      { value: 'localhost', label: 'localhost', hint: 'compativel com todos' },
+      { value: 'localhost', label: 'localhost', hint: 'compatible with all browsers' },
     ],
   }))
 
   const enableTelemetry = bail(await confirm({
-    message: 'Ativar telemetria para diagnostico? (salva em /tmp/mdprobe-telemetry.jsonl)',
-    initialValue: false,
+    message: 'Enable telemetry for diagnostics? (local only — no data leaves your machine)',
+    initialValue: currentConfig.telemetry === true,
   }))
 
   const ides = await detectIDEs()
   if (ides.length > 0) {
-    console.log(`  IDEs detectados: ${ides.map(i => `✓ ${i}`).join(', ')}`)
+    console.log(`  IDEs detected: ${ides.map(i => `✓ ${i}`).join(', ')}`)
   } else {
-    console.log('  Nenhum IDE detectado.')
+    console.log('  No IDEs detected.')
   }
 
   const s = spinner()
-  s.start('Instalando...')
+  s.start('Installing...')
 
   const installed = []
 
@@ -100,15 +105,15 @@ export async function runSetup(args) {
   const hookResult = await registerHook()
   await saveConfig({ author, urlStyle, telemetry: enableTelemetry })
 
-  s.stop('Instalado com sucesso!')
+  s.stop('Installed successfully!')
 
   if (installed.length > 0) {
-    console.log('\n  Skills instaladas:')
+    console.log('\n  Skills installed:')
     installed.forEach(p => console.log(`    ${p}`))
   }
-  console.log(`\n  MCP server registrado (${mcpResult.method})`)
-  if (hookResult.added) console.log('  Hook PostToolUse registrado')
-  console.log(`  Config salva em ~/.mdprobe.json`)
+  console.log(`\n  MCP server registered (${mcpResult.method})`)
+  if (hookResult.migrated) console.log('  Old PostToolUse hook removed (no longer needed)')
+  console.log(`  Config saved to ~/.mdprobe.json`)
 
-  outro('Reinicie o Claude Code para ativar.')
+  outro('Restart Claude Code to activate.')
 }

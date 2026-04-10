@@ -101,9 +101,15 @@ export async function registerMCP() {
 }
 
 /**
- * Register PostToolUse hook in settings.json (safe merge).
+ * Migrate PostToolUse hook — removes the old v0.3.0 hook that caused
+ * unwanted mdprobe launches. The hook used imperative language
+ * ("Offer to open with mdProbe") which the AI treated as a command,
+ * starting random server instances on every .md edit.
+ *
+ * The SKILL.md alone handles discoverability — no hook is needed.
+ *
  * @param {string} [settingsPath] - Override path for testing
- * @returns {Promise<{added: boolean}>}
+ * @returns {Promise<{added: boolean, migrated?: boolean}>}
  */
 export async function registerHook(settingsPath) {
   if (!settingsPath) {
@@ -113,31 +119,26 @@ export async function registerHook(settingsPath) {
   let settings = {}
   try {
     settings = JSON.parse(await readFile(settingsPath, 'utf-8'))
-  } catch { /* start fresh */ }
+  } catch { /* no settings file — nothing to migrate */ }
 
-  if (!settings.hooks) settings.hooks = {}
-  if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = []
-
-  // Check if mdprobe hook already exists
-  const existing = settings.hooks.PostToolUse.find(h =>
+  // Migration: remove old mdprobe hook if present
+  const hooks = settings.hooks?.PostToolUse ?? []
+  const hadOldHook = hooks.some(h =>
     h.hooks?.some(hh => typeof hh.command === 'string' && hh.command.includes('[mdprobe]'))
   )
-  if (existing) {
-    tel.log('register_hook', { added: false })
-    return { added: false }
+
+  if (hadOldHook) {
+    settings.hooks.PostToolUse = hooks.filter(h =>
+      !h.hooks?.some(hh => typeof hh.command === 'string' && hh.command.includes('[mdprobe]'))
+    )
+    await mkdir(dirname(settingsPath), { recursive: true })
+    await writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8')
+    tel.log('register_hook', { added: false, migrated: true })
+    return { added: false, migrated: true }
   }
 
-  const hookCommand = `node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8')); const p=d.tool_input?.file_path||''; if(p.endsWith('.md')){const j={decision:'allow',reason:'[mdprobe] .md file modified: '+require('path').basename(p)+'. Offer to open with mdProbe.'}; process.stdout.write(JSON.stringify(j))}"`
-
-  settings.hooks.PostToolUse.push({
-    matcher: 'Write|Edit',
-    hooks: [{ type: 'command', command: hookCommand }],
-  })
-
-  await mkdir(dirname(settingsPath), { recursive: true })
-  await writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8')
-  tel.log('register_hook', { added: true })
-  return { added: true }
+  tel.log('register_hook', { added: false })
+  return { added: false }
 }
 
 /**

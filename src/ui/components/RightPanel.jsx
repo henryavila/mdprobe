@@ -120,7 +120,7 @@ function AnnotationCard({ ann, isSelected, onClick, annotationOps, editingId, se
         <span class={`tag tag-${ann.tag}`}>{ann.tag}</span>
         <span style="font-size: 11px; color: var(--text-muted)">{ann.author}</span>
         {ann.status === 'resolved' && <span style="font-size: 10px; color: var(--status-approved)">✓ resolved</span>}
-        {orphaned && <span style="font-size: 10px; color: var(--tag-bug)">não encontrada</span>}
+        {orphaned && <span style="font-size: 10px; color: var(--tag-bug)">not found</span>}
       </div>
 
       {/* Quote */}
@@ -187,7 +187,7 @@ function OrphanedSection({ annotations, selectedAnnotationId, onSelect, annotati
     <div class="orphaned-section">
       <div class="orphaned-section-header" onClick={() => setCollapsed(c => !c)}>
         <span>{collapsed ? '▸' : '▾'}</span>
-        <span>Não encontradas ({annotations.length})</span>
+        <span>Not found ({annotations.length})</span>
       </div>
       {!collapsed && annotations.map(ann => (
         <AnnotationCard

@@ -13,7 +13,7 @@ description: Preview, visualize, and review markdown in the browser. Call
 ## When to Use
 
 - ANY content >20 lines that needs human review (findings, specs, plans, analysis, validation lists)
-- Generating, editing, or referencing `.md` files
+- Delivering a `.md` file the human should read (spec you wrote, analysis, doc you generated)
 - Tables, Mermaid diagrams, math/LaTeX, syntax-highlighted code
 - Human needs to **review and annotate** before you proceed
 - You need **section-level approval** (approved/rejected per heading)
@@ -56,9 +56,11 @@ conversation and asking "what do you think?" — STOP. Save it to a file and use
 
 ## Rules
 
-### Rule 1 — Always show URL when citing .md
+### Rule 1 — Open files the human should read
 
-Whenever you mention a `.md` file path in output, call `mdprobe_view` and show the URL.
+When you produce, present, or deliver a `.md` file for the human to read, call `mdprobe_view` and show the URL.
+
+Do NOT call `mdprobe_view` when merely mentioning a file in a status update (e.g., "I edited README.md to fix the link" — that's a report, the human doesn't need to read the file).
 
 **Single file:**
 
@@ -70,7 +72,7 @@ Show: `📄 docs/spec.md → http://{urlStyle}:{port}/spec.md`
 
 > mdprobe_view({ paths: ["docs/spec.md", "docs/batch-1.md", "docs/batch-2.md"] })
 
-Show: `📄 3 arquivos → http://{urlStyle}:{port}`
+Show: `📄 3 files → http://{urlStyle}:{port}`
 
 ### Rule 2 — Review opens automatically
 
@@ -81,11 +83,11 @@ When the context is review (human needs to read and give feedback now):
 Show:
 
 ```
-📄 Aberto para revisão no browser.
-Anote seus comentários. Me avise quando terminar.
+📄 Opened for review in the browser.
+Add your comments. Let me know when you're done.
 ```
 
-For multiple files: `📄 3 specs abertos para revisão no browser.`
+For multiple files: `📄 3 specs opened for review in the browser.`
 
 ### Rule 3 — Read, address, and resolve annotations
 

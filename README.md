@@ -4,6 +4,8 @@
 
 Markdown viewer and reviewer with live reload, persistent annotations, and AI agent integration.
 
+[🇧🇷 Leia em Português](README.pt-BR.md)
+
 Open `.md` files in the browser, annotate inline, approve sections, and export structured feedback as YAML — all from the terminal.
 
 ---

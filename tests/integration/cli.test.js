@@ -23,7 +23,7 @@ let tmpDir
  * Run the CLI with given args and return { stdout, stderr, code }.
  * Automatically kills after `timeout` ms to prevent hanging servers.
  */
-function run(args = [], { cwd, timeout = 5000, input } = {}) {
+function run(args = [], { cwd, timeout = 5000, input, env } = {}) {
   return new Promise((resolve) => {
     const child = execFile(
       NODE,
@@ -31,7 +31,7 @@ function run(args = [], { cwd, timeout = 5000, input } = {}) {
       {
         cwd: cwd || tmpDir,
         timeout,
-        env: { ...process.env, NO_COLOR: '1' },
+        env: env || { ...process.env, NO_COLOR: '1' },
       },
       (error, stdout, stderr) => {
         resolve({
@@ -693,7 +693,13 @@ describe('Config edge cases', () => {
   })
 
   it('setup --yes runs non-interactive setup', async () => {
-    const result = await run(['setup', '--yes', '--author', 'Test'])
+    // Use isolated HOME to prevent overwriting real user configs
+    const fakeHome = join(tmpDir, 'fakehome')
+    await mkdir(join(fakeHome, '.claude'), { recursive: true })
+    const result = await run(['setup', '--yes', '--author', 'Test'], {
+      cwd: tmpDir,
+      env: { ...process.env, HOME: fakeHome, NO_COLOR: '1' },
+    })
     expect(result.code).toBe(0)
   })
 })

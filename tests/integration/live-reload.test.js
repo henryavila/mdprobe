@@ -77,7 +77,7 @@ describe('RF06 - Live reload', () => {
     // Seed the directory with an initial .md file
     await writeFile(join(tmpDir, 'spec.md'), '# Spec\n\nInitial content.\n')
 
-    server = await createServer({ files: [tmpDir], open: false })
+    server = await createServer({ files: [tmpDir], open: false, port: 0 })
     ws = connectClient(server)
     await waitForOpen(ws)
   })
@@ -231,7 +231,7 @@ describe('RF06 - Live reload', () => {
       await mkdir(subDir, { recursive: true })
       await writeFile(join(subDir, 'nested.md'), '# Nested\n\nOriginal.\n')
 
-      server = await createServer({ files: [tmpDir], open: false })
+      server = await createServer({ files: [tmpDir], open: false, port: 0 })
       ws = connectClient(server)
       await waitForOpen(ws)
 

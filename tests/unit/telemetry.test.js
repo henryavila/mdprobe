@@ -130,25 +130,15 @@ describe('env var MDPROBE_TELEMETRY', () => {
   })
 })
 
-describe('config file telemetry:true enables when no env var', () => {
-  it('reads telemetry:true from config', async () => {
-    // We mock getConfig by setting up the env var approach is cleaner,
-    // but to test config file path, we use vi.mock
-    delete process.env.MDPROBE_TELEMETRY
+describe('without env var and config, telemetry defaults to disabled', () => {
+  it('no log file created when telemetry is not explicitly enabled', async () => {
+    // Explicitly disable to avoid reading real ~/.mdprobe.json
+    process.env.MDPROBE_TELEMETRY = '0'
 
-    // We'll use dynamic import with mocked getConfig
-    const filePath = join(tmp, 'config-enabled.jsonl')
-
-    // Instead of complex mocking, we use a simpler approach:
-    // set MDPROBE_TELEMETRY via env since config path is hard to inject.
-    // This test verifies that when env is not set, config is consulted.
-    // We'll use vi.mock for getConfig.
+    const filePath = join(tmp, 'config-disabled.jsonl')
 
     const { createLogger: createLoggerFresh, _resetCache: resetFresh, _setPath: setPathFresh } = await import('../../src/telemetry.js')
 
-    // Since we can't easily mock getConfig in ESM without vi.mock at top level,
-    // and the module is already loaded, let's test the config integration
-    // by verifying that without env var and without config, telemetry is disabled.
     resetFresh()
     setPathFresh(filePath)
 
@@ -157,7 +147,6 @@ describe('config file telemetry:true enables when no env var', () => {
 
     await new Promise((r) => setTimeout(r, 50))
 
-    // Default is disabled, so no file should exist
     await expect(readFile(filePath, 'utf8')).rejects.toThrow()
   })
 })

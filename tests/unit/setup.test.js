@@ -63,50 +63,58 @@ describe('installSkill()', () => {
 })
 
 describe('registerHook()', () => {
-  it('adds PostToolUse hook to empty settings', async () => {
+  it('does not register a hook (removed in v0.3.1 — caused unwanted mdprobe launches)', async () => {
     tmp = await mkdtemp(join(tmpdir(), 'setup-hook-'))
     const settingsPath = join(tmp, 'settings.json')
 
     const result = await registerHook(settingsPath)
-    expect(result.added).toBe(true)
+    expect(result.added).toBe(false)
 
-    const settings = JSON.parse(await readFile(settingsPath, 'utf-8'))
-    expect(settings.hooks.PostToolUse).toHaveLength(1)
-    expect(settings.hooks.PostToolUse[0].matcher).toBe('Write|Edit')
-    expect(settings.hooks.PostToolUse[0].hooks[0].command).toContain('[mdprobe]')
+    // No hook should be registered — SKILL.md alone handles discovery
+    let settings = {}
+    try { settings = JSON.parse(await readFile(settingsPath, 'utf-8')) } catch { /* file may not exist */ }
+    const hooks = settings.hooks?.PostToolUse ?? []
+    expect(hooks).toHaveLength(0)
   })
 
-  it('preserves existing hooks', async () => {
+  it('migrates old hook — removes it without adding a new one', async () => {
     tmp = await mkdtemp(join(tmpdir(), 'setup-hook2-'))
     const settingsPath = join(tmp, 'settings.json')
 
-    const existing = {
+    // Simulate old v0.3.0 installation with the problematic hook
+    const oldSettings = {
       hooks: {
-        PostToolUse: [{
-          matcher: 'Bash',
-          hooks: [{ type: 'command', command: 'echo "other hook"' }],
-        }],
+        PostToolUse: [
+          {
+            matcher: 'Bash',
+            hooks: [{ type: 'command', command: 'echo "unrelated hook"' }],
+          },
+          {
+            matcher: 'Write|Edit',
+            hooks: [{ type: 'command', command: 'node -e "... [mdprobe] .md file modified ... Offer to open ..."' }],
+          },
+        ],
       },
     }
-    await writeFile(settingsPath, JSON.stringify(existing), 'utf-8')
+    await writeFile(settingsPath, JSON.stringify(oldSettings), 'utf-8')
 
-    await registerHook(settingsPath)
+    const result = await registerHook(settingsPath)
+    expect(result.migrated).toBe(true)
 
     const settings = JSON.parse(await readFile(settingsPath, 'utf-8'))
-    expect(settings.hooks.PostToolUse).toHaveLength(2)
+    // Old mdprobe hook removed, unrelated hook preserved
+    expect(settings.hooks.PostToolUse).toHaveLength(1)
     expect(settings.hooks.PostToolUse[0].matcher).toBe('Bash')
   })
 
-  it('is idempotent (does not duplicate)', async () => {
+  it('is idempotent — no-ops when no old hook exists', async () => {
     tmp = await mkdtemp(join(tmpdir(), 'setup-hook3-'))
     const settingsPath = join(tmp, 'settings.json')
 
     await registerHook(settingsPath)
     const result = await registerHook(settingsPath)
     expect(result.added).toBe(false)
-
-    const settings = JSON.parse(await readFile(settingsPath, 'utf-8'))
-    expect(settings.hooks.PostToolUse).toHaveLength(1)
+    expect(result.migrated).toBeUndefined()
   })
 })
 
@@ -164,13 +172,21 @@ describe('removeAll()', () => {
     await expect(access(configPath)).rejects.toThrow()
   })
 
-  it('removes hook from settings', async () => {
+  it('removes hook from settings (legacy installations)', async () => {
     tmp = await mkdtemp(join(tmpdir(), 'setup-rm2-'))
     const settingsPath = join(tmp, 'settings.json')
     const configPath = join(tmp, '.mdprobe.json')
 
-    // Set up hook first
-    await registerHook(settingsPath)
+    // Simulate a legacy installation that still has the old hook
+    const oldSettings = {
+      hooks: {
+        PostToolUse: [{
+          matcher: 'Write|Edit',
+          hooks: [{ type: 'command', command: 'node -e "... [mdprobe] ..."' }],
+        }],
+      },
+    }
+    await writeFile(settingsPath, JSON.stringify(oldSettings), 'utf-8')
 
     const removed = await removeAll({ configPath, settingsPath })
     expect(removed).toContain('hook')

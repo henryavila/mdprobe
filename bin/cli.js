@@ -236,7 +236,7 @@ async function main() {
     const { createInterface } = await import('node:readline')
     const rl = createInterface({ input: process.stdin, output: process.stdout })
     const name = await new Promise(resolve => {
-      rl.question('Qual seu nome para anotacoes? ', answer => {
+      rl.question('What is your name for annotations? ', answer => {
         rl.close()
         resolve(answer.trim())
       })
