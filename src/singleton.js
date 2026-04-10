@@ -75,6 +75,9 @@ export async function removeLockFile(lockPath = DEFAULT_LOCK_PATH) {
  * @param {string} [lockPath]
  */
 export function removeLockFileSync(lockPath = DEFAULT_LOCK_PATH) {
+  // Note: tel.log uses cached _enabledCache. If cache is still null (very early exit
+  // before any log call), the async resolution won't complete inside 'exit' handler.
+  // In practice cli.js logs 'start' first, so the cache is always resolved by here.
   tel.log('lock_remove', { trigger: 'sync' })
   try {
     unlinkSync(lockPath)

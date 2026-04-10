@@ -41,9 +41,9 @@ async function getOrCreateServer(port = 3000) {
         return srv
       })
     }
+    const srv = await httpServerPromise
+    tel.log('server_create', { mode: srv._remote ? 'remote' : 'new', port: srv.port, url: srv.url })
   }
-  const srv = await httpServerPromise
-  tel.log('server_create', { mode: srv._remote ? 'remote' : 'new', port: srv.port, url: srv.url })
   return httpServerPromise
 }
 
