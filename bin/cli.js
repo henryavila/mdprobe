@@ -11,6 +11,9 @@ import { createServer as createMdprobeServer } from '../src/server.js'
 import { findMarkdownFiles, extractFlag, hasFlag } from '../src/cli-utils.js'
 import { openBrowser } from '../src/open-browser.js'
 import { discoverExistingServer, joinExistingServer, writeLockFile, registerShutdownHandlers } from '../src/singleton.js'
+import { createLogger, getParentCmd } from '../src/telemetry.js'
+
+const tel = createLogger('cli')
 
 // ---------------------------------------------------------------------------
 // Resolve paths
@@ -51,6 +54,7 @@ Subcommands:
 }
 
 function fatal(msg) {
+  tel.log('exit', { code: 1, reason: msg })
   process.stderr.write(msg + '\n')
   process.exit(1)
 }
@@ -62,9 +66,32 @@ function fatal(msg) {
 async function main() {
   const args = [...rawArgs]
 
+  // Determine mode from subcommand
+  const mode = ['mcp', 'setup', 'config', 'export'].includes(args[0])
+    ? args[0]
+    : 'serve'
+
+  // Read package version for telemetry
+  let pkgVersion = 'unknown'
+  try {
+    const pkg = JSON.parse(readFileSync(PKG_PATH, 'utf-8'))
+    pkgVersion = pkg.version
+  } catch { /* ignore */ }
+
+  tel.log('start', {
+    args: process.argv.slice(2),
+    mode,
+    version: pkgVersion,
+    ppid: process.ppid,
+    parentCmd: getParentCmd(),
+    tty: process.stdin.isTTY || false,
+    cwd: process.cwd(),
+  })
+
   // --help
   if (hasFlag(args, '--help', '-h')) {
     printUsage()
+    tel.log('exit', { code: 0, reason: 'help' })
     process.exit(0)
   }
 
@@ -76,6 +103,7 @@ async function main() {
     } catch {
       console.log('unknown')
     }
+    tel.log('exit', { code: 0, reason: 'version' })
     process.exit(0)
   }
 
@@ -98,6 +126,7 @@ async function main() {
           console.log(`${k}: ${v}`)
         }
       }
+      tel.log('exit', { code: 0, reason: 'config:list' })
       process.exit(0)
     }
 
@@ -105,6 +134,7 @@ async function main() {
       // Set config
       await setConfig(key, value)
       console.log(`Set ${key} = ${value}`)
+      tel.log('exit', { code: 0, reason: 'config:set' })
       process.exit(0)
     }
 
@@ -115,6 +145,7 @@ async function main() {
     } else {
       console.log(`(not set)`)
     }
+    tel.log('exit', { code: 0, reason: 'config:get' })
     process.exit(0)
   }
 
@@ -122,6 +153,7 @@ async function main() {
   if (subcommand === 'setup') {
     const { runSetup } = await import('../src/setup-ui.js')
     await runSetup(args.slice(1))
+    tel.log('exit', { code: 0, reason: 'setup' })
     process.exit(0)
   }
 
@@ -192,6 +224,7 @@ async function main() {
       fatal('Error: export requires a format flag: --report, --inline, --json, or --sarif')
     }
 
+    tel.log('exit', { code: 0, reason: 'export' })
     process.exit(0)
   }
 
@@ -296,6 +329,7 @@ async function main() {
         console.log('No annotations created.')
       }
       await server.close()
+      tel.log('exit', { code: 0, reason: 'once:done' })
       process.exit(0)
     } catch (err) {
       fatal(`Error: ${err.message}`)
@@ -318,6 +352,7 @@ async function main() {
             : existing.url
           try { await openBrowser(fileUrl) } catch { /* ignore */ }
         }
+        tel.log('exit', { code: 0, reason: 'joined-existing' })
         process.exit(0)
       }
       console.log('Could not join existing server, starting new instance...')
@@ -337,7 +372,9 @@ async function main() {
       url: server.url,
       startedAt: new Date().toISOString(),
     })
-    registerShutdownHandlers(server)
+    registerShutdownHandlers(server, undefined, () => {
+      tel.log('exit', { code: 0, reason: 'shutdown' })
+    })
 
     console.log(`Server listening at ${server.url}`)
     if (!noOpenFlag) {

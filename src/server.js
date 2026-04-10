@@ -9,6 +9,9 @@ import { render } from './renderer.js'
 import { AnnotationFile, computeSectionStatus } from './annotations.js'
 import { detectDrift } from './hash.js'
 import { reanchorAll } from './anchoring.js'
+import { createLogger } from './telemetry.js'
+
+const tel = createLogger('server')
 
 // ---------------------------------------------------------------------------
 // File resolution
@@ -282,6 +285,9 @@ export async function createServer(options) {
 
   // 2. Find an available port
   const actualPort = await findAvailablePort(preferredPort)
+  if (actualPort !== preferredPort) {
+    tel.log('port_search', { requested: preferredPort, chosen: actualPort })
+  }
 
   // 3. Build route handler (onFinish is set below for --once mode)
   let onFinishCallback = null
@@ -307,18 +313,21 @@ export async function createServer(options) {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' })
 
   wss.on('connection', (ws) => {
+    tel.log('ws_connect', { clientCount: wss.clients.size })
+
     ws.on('message', (data) => {
       try {
         const msg = JSON.parse(data.toString())
         if (msg.type === 'ping') {
           ws.send(JSON.stringify({ type: 'pong' }))
         }
-      } catch {
-        // Ignore malformed messages
+      } catch (err) {
+        tel.log('error', { fn: 'ws.onMessage', error: err.message })
       }
     })
 
     ws.on('close', () => {
+      tel.log('ws_disconnect', { clientCount: wss.clients.size })
       if (typeof onDisconnect === 'function') {
         onDisconnect()
       }
@@ -333,6 +342,7 @@ export async function createServer(options) {
       resolve()
     })
   })
+  tel.log('listen', { port: actualPort, url: `http://127.0.0.1:${actualPort}`, fileCount: resolvedFiles.length })
 
   // 7. Set up file watcher for live reload
   const watchDirs = new Set(resolvedFiles.map((f) => node_path.dirname(f)))
@@ -411,7 +421,7 @@ export async function createServer(options) {
               ),
             })
           }
-        } catch { /* no sidecar or drift check failed — skip */ }
+        } catch (err) { if (err.code !== 'ENOENT') tel.log('error', { fn: 'watcher.driftCheck', error: err.message }) }
       } catch (err) {
         broadcastToAll({
           type: 'error',
@@ -564,7 +574,7 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
                 )
               }
             }
-          } catch { /* no drift info available */ }
+          } catch (err) { if (err.code !== 'ENOENT') tel.log('error', { fn: 'annotations.driftCheck', error: err.message }) }
         } catch {
           // No sidecar or unreadable
           json = {
@@ -789,7 +799,7 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
           try {
             await node_fs.stat(sidecar)
             yamlPaths.push(sidecar)
-          } catch { /* no sidecar */ }
+          } catch { /* no sidecar — expected for files without annotations */ }
         }
         const onFinish = getOnFinish()
         if (typeof onFinish === 'function') {

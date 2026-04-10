@@ -9,6 +9,8 @@ import { AnnotationFile } from './annotations.js'
 import { getConfig } from './config.js'
 import { hashContent } from './hash.js'
 import { discoverExistingServer, joinExistingServer, writeLockFile, computeBuildHash } from './singleton.js'
+import { createLogger } from './telemetry.js'
+const tel = createLogger('mcp')
 
 let httpServerPromise = null
 
@@ -39,6 +41,8 @@ async function getOrCreateServer(port = 3000) {
         return srv
       })
     }
+    const srv = await httpServerPromise
+    tel.log('server_create', { mode: srv._remote ? 'remote' : 'new', port: srv.port, url: srv.url })
   }
   return httpServerPromise
 }
@@ -91,6 +95,7 @@ export async function startMcpServer() {
       open: z.boolean().optional().default(true).describe('Auto-open browser'),
     }),
   }, async (params) => {
+    tel.log('tool_call', { tool: 'mdprobe_view', hasContent: !!params.content, hasPaths: !!params.paths?.length, open: params.open })
     const validation = validateViewParams(params)
     if (validation.error) {
       return {
@@ -116,7 +121,12 @@ export async function startMcpServer() {
     const url = resolved.length === 1
       ? buildUrl(srv.port, urlStyle, basename(resolved[0]))
       : buildUrl(srv.port, urlStyle)
-    if (params.open) await openBrowser(url).catch(() => {})
+    if (params.open) {
+      tel.log('browser_open', { url })
+      await openBrowser(url).catch((err) => { tel.log('error', { fn: 'openBrowser', error: err.message }) })
+    } else {
+      tel.log('browser_skip', { url })
+    }
 
     const response = { url, files: resolved.map(p => basename(p)) }
     if (savedTo) response.savedTo = savedTo
@@ -132,6 +142,7 @@ export async function startMcpServer() {
       path: z.string().describe('Path to .md file'),
     }),
   }, async ({ path }) => {
+    tel.log('tool_call', { tool: 'mdprobe_annotations', path })
     const resolved = resolve(path)
     const sidecarPath = resolved.replace(/\.md$/, '.annotations.yaml')
 
@@ -178,6 +189,7 @@ export async function startMcpServer() {
       })).describe('Batch operations'),
     }),
   }, async ({ path, actions }) => {
+    tel.log('tool_call', { tool: 'mdprobe_update', path, actionCount: actions?.length })
     const resolved = resolve(path)
     const sidecarPath = resolved.replace(/\.md$/, '.annotations.yaml')
 
@@ -236,6 +248,7 @@ export async function startMcpServer() {
     description: 'Returns current MCP server state',
     inputSchema: z.object({}),
   }, async () => {
+    tel.log('tool_call', { tool: 'mdprobe_status' })
     if (!httpServerPromise) {
       return { content: [{ type: 'text', text: JSON.stringify({ running: false }) }] }
     }
@@ -251,6 +264,7 @@ export async function startMcpServer() {
 
   const transport = new StdioServerTransport()
   await server.connect(transport)
+  tel.log('start', { author, urlStyle })
 }
 
 // For testing: expose internals

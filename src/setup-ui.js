@@ -38,6 +38,7 @@ export async function runSetup(args) {
   if (isNonInteractive) {
     const author = authorFlag || 'anonymous'
     const urlStyle = 'localhost'
+    const enableTelemetry = args.includes('--telemetry')
     const ides = await detectIDEs()
 
     const s = spinner()
@@ -48,7 +49,7 @@ export async function runSetup(args) {
     }
     await registerMCP()
     await registerHook()
-    await saveConfig({ author, urlStyle })
+    await saveConfig({ author, urlStyle, telemetry: enableTelemetry })
 
     s.stop('Instalado com sucesso')
     console.log(`  IDEs: ${ides.length > 0 ? ides.join(', ') : 'nenhum detectado'}`)
@@ -73,6 +74,11 @@ export async function runSetup(args) {
     ],
   }))
 
+  const enableTelemetry = bail(await confirm({
+    message: 'Ativar telemetria para diagnostico? (salva em /tmp/mdprobe-telemetry.jsonl)',
+    initialValue: false,
+  }))
+
   const ides = await detectIDEs()
   if (ides.length > 0) {
     console.log(`  IDEs detectados: ${ides.map(i => `✓ ${i}`).join(', ')}`)
@@ -92,7 +98,7 @@ export async function runSetup(args) {
 
   const mcpResult = await registerMCP()
   const hookResult = await registerHook()
-  await saveConfig({ author, urlStyle })
+  await saveConfig({ author, urlStyle, telemetry: enableTelemetry })
 
   s.stop('Instalado com sucesso!')
 
