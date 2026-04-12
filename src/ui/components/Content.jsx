@@ -110,6 +110,82 @@ export function Content({ annotationOps }) {
     })
   }, [currentHtml.value, sections.value])
 
+  // Inject copy-to-clipboard buttons on code blocks
+  useEffect(() => {
+    const el = contentRef.current
+    if (!el) return
+
+    // Remove previously injected toolbars
+    el.querySelectorAll('.code-block-toolbar').forEach(n => n.remove())
+
+    el.querySelectorAll('pre').forEach(pre => {
+      const code = pre.querySelector('code')
+      if (!code) return
+      // Skip mermaid and math blocks
+      const classes = code.className || ''
+      if (classes.includes('language-mermaid') || classes.includes('language-math')) return
+
+      const toolbar = document.createElement('div')
+      toolbar.className = 'code-block-toolbar'
+
+      // Language label
+      const langMatch = classes.match(/language-(\S+)/)
+      if (langMatch) {
+        const label = document.createElement('span')
+        label.className = 'code-lang-label'
+        label.textContent = langMatch[1]
+        toolbar.appendChild(label)
+      }
+
+      // Copy button
+      const btn = document.createElement('button')
+      btn.className = 'copy-code-btn'
+      btn.title = 'Copy code'
+      btn.appendChild(createCopyIcon())
+
+      btn.onclick = (e) => {
+        e.stopPropagation()
+        const text = code.textContent
+        navigator.clipboard.writeText(text).then(() => {
+          btn.classList.add('copied')
+          btn.replaceChildren(createCheckIcon())
+          setTimeout(() => {
+            btn.classList.remove('copied')
+            btn.replaceChildren(createCopyIcon())
+          }, 2000)
+        })
+      }
+
+      toolbar.appendChild(btn)
+      pre.appendChild(toolbar)
+    })
+  }, [currentHtml.value])
+
+  // ---------------------------------------------------------------------------
+  // Copy-to-clipboard SVG icon helpers (DOM-only, no innerHTML)
+  // ---------------------------------------------------------------------------
+  function createCopyIcon() {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('viewBox', '0 0 24 24')
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+    rect.setAttribute('x', '9'); rect.setAttribute('y', '9')
+    rect.setAttribute('width', '13'); rect.setAttribute('height', '13')
+    rect.setAttribute('rx', '2')
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+    path.setAttribute('d', 'M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1')
+    svg.append(rect, path)
+    return svg
+  }
+
+  function createCheckIcon() {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('viewBox', '0 0 24 24')
+    const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline')
+    polyline.setAttribute('points', '20 6 9 17 4 12')
+    svg.appendChild(polyline)
+    return svg
+  }
+
   // ---------------------------------------------------------------------------
   // Highlight helper functions
   // ---------------------------------------------------------------------------

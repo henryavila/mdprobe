@@ -925,6 +925,69 @@ body {
   overflow-x: auto;
   margin: 0 0 16px;
   line-height: 1.5;
+  position: relative;
+}
+
+/* Copy-to-clipboard toolbar */
+.code-block-toolbar {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.content-area pre:hover .code-block-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.code-lang-label {
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  user-select: none;
+}
+
+.copy-code-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.copy-code-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border-color: var(--text-muted);
+}
+
+.copy-code-btn.copied {
+  color: var(--tag-suggestion);
+  border-color: var(--tag-suggestion);
+}
+
+.copy-code-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .content-area pre code {
