@@ -1,0 +1,150 @@
+<h2>Abordagem simplificada — 2 grupos</h2>
+<p class="subtitle">Annotations normais vs. "não encontradas". Sem jargão técnico.</p>
+
+<div class="options">
+  <!-- Option A: Minimal -->
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Banner com contagem + seção colapsável</h3>
+      <p>Banner informa quantas não foram encontradas. Seção separada no final do painel, colapsável.</p>
+
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-header">Right Panel</div>
+        <div class="mockup-body" style="padding: 12px; background: #1e1e2e; font-family: system-ui;">
+
+          <!-- Simplified banner -->
+          <div style="background: linear-gradient(135deg, #45475a, #3b3d52); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #cdd6f4; border-left: 3px solid #f9e2af;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <span>
+                <span style="color: #f9e2af;">⚠</span>
+                Arquivo modificado — <strong>1 anotação não encontrada</strong>
+              </span>
+              <span style="color: #6c7086; font-size:11px; cursor:pointer;">✕</span>
+            </div>
+          </div>
+
+          <!-- Normal annotation 1 -->
+          <div style="background: #313244; border-radius: 6px; padding: 10px; margin-bottom: 6px; border-left: 3px solid #89b4fa;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+              <span style="background: #89b4fa; color: #1e1e2e; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;">question</span>
+              <span style="color:#6c7086; font-size:10px;">@henry</span>
+            </div>
+            <div style="color: #a6adc8; font-size: 11px; font-style: italic; margin: 4px 0;">"This function handles..."</div>
+            <div style="color: #cdd6f4; font-size: 12px;">Esse trecho precisa de documentação</div>
+          </div>
+
+          <!-- Normal annotation 2 -->
+          <div style="background: #313244; border-radius: 6px; padding: 10px; margin-bottom: 6px; border-left: 3px solid #fab387;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+              <span style="background: #fab387; color: #1e1e2e; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;">suggestion</span>
+              <span style="color:#6c7086; font-size:10px;">@henry</span>
+            </div>
+            <div style="color: #a6adc8; font-size: 11px; font-style: italic; margin: 4px 0;">"Use async/await instead..."</div>
+            <div style="color: #cdd6f4; font-size: 12px;">Considerar async/await aqui</div>
+          </div>
+
+          <!-- Normal annotation 3 -->
+          <div style="background: #313244; border-radius: 6px; padding: 10px; margin-bottom: 12px; border-left: 3px solid #a6e3a1;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+              <span style="background: #a6e3a1; color: #1e1e2e; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;">nitpick</span>
+              <span style="color:#6c7086; font-size:10px;">@henry</span>
+            </div>
+            <div style="color: #cdd6f4; font-size: 12px;">Espaçamento inconsistente</div>
+          </div>
+
+          <!-- Orphaned section - collapsed -->
+          <div style="border-top: 1px solid #45475a; padding-top: 10px;">
+            <div style="display:flex; align-items:center; gap:6px; cursor:pointer; padding: 6px 0;">
+              <span style="color: #f38ba8; font-size: 12px;">▾</span>
+              <span style="color: #f38ba8; font-size: 12px; font-weight: 500;">Não encontradas (1)</span>
+            </div>
+
+            <!-- Orphaned card -->
+            <div style="background: #313244; border-radius: 6px; padding: 10px; margin-top: 6px; border-left: 3px solid #f38ba8; opacity: 0.65;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+                <span style="background: #f38ba8; color: #1e1e2e; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;">bug</span>
+                <span style="color:#6c7086; font-size:10px;">@henry</span>
+              </div>
+              <div style="color: #a6adc8; font-size: 11px; font-style: italic; text-decoration: line-through; margin: 4px 0;">"old function name..."</div>
+              <div style="color: #cdd6f4; font-size: 12px;">Race condition no handler</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B: Even more minimal -->
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Inline no mesmo fluxo + visual diferenciado</h3>
+      <p>Sem seção separada. Orphans ficam no fluxo normal, mas com visual claramente diferente (opacidade + borda tracejada).</p>
+
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-header">Right Panel</div>
+        <div class="mockup-body" style="padding: 12px; background: #1e1e2e; font-family: system-ui;">
+
+          <!-- Banner -->
+          <div style="background: linear-gradient(135deg, #45475a, #3b3d52); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #cdd6f4; border-left: 3px solid #f9e2af;">
+            <span style="color: #f9e2af;">⚠</span>
+            Arquivo modificado — <strong>1 de 4 anotações não encontrada</strong>
+          </div>
+
+          <!-- Normal annotation -->
+          <div style="background: #313244; border-radius: 6px; padding: 10px; margin-bottom: 6px; border-left: 3px solid #89b4fa;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+              <span style="background: #89b4fa; color: #1e1e2e; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;">question</span>
+              <span style="color:#6c7086; font-size:10px;">@henry</span>
+            </div>
+            <div style="color: #cdd6f4; font-size: 12px;">Esse trecho precisa de documentação</div>
+          </div>
+
+          <!-- Normal annotation -->
+          <div style="background: #313244; border-radius: 6px; padding: 10px; margin-bottom: 6px; border-left: 3px solid #fab387;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+              <span style="background: #fab387; color: #1e1e2e; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;">suggestion</span>
+              <span style="color:#6c7086; font-size:10px;">@henry</span>
+            </div>
+            <div style="color: #cdd6f4; font-size: 12px;">Considerar async/await aqui</div>
+          </div>
+
+          <!-- Orphaned - visually distinct but inline -->
+          <div style="background: rgba(49,50,68,0.5); border-radius: 6px; padding: 10px; margin-bottom: 6px; border: 1px dashed #f38ba8; opacity: 0.6;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+              <span style="background: #f38ba8; color: #1e1e2e; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;">bug</span>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span style="color:#f38ba8; font-size:10px;">não encontrada</span>
+                <span style="color:#6c7086; font-size:10px;">@henry</span>
+              </div>
+            </div>
+            <div style="color: #a6adc8; font-size: 11px; font-style: italic; text-decoration: line-through; margin: 4px 0;">"old function name..."</div>
+            <div style="color: #cdd6f4; font-size: 12px;">Race condition no handler</div>
+          </div>
+
+          <!-- Normal annotation -->
+          <div style="background: #313244; border-radius: 6px; padding: 10px; margin-bottom: 6px; border-left: 3px solid #a6e3a1;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+              <span style="background: #a6e3a1; color: #1e1e2e; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;">nitpick</span>
+              <span style="color:#6c7086; font-size:10px;">@henry</span>
+            </div>
+            <div style="color: #cdd6f4; font-size: 12px;">Espaçamento inconsistente</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 16px; padding: 12px 16px; background: rgba(255,255,255,0.03); border-radius: 8px; font-size: 13px;">
+  <h3>Resumo das simplificações</h3>
+  <ul style="line-height: 1.8;">
+    <li><strong>2 estados</strong> em vez de 3: "encontrada" (position/exact/fuzzy) vs "não encontrada" (orphan)</li>
+    <li><strong>Sem jargão</strong>: "não encontrada" em vez de "órfã/deslocada/ancorada"</li>
+    <li><strong>Banner direto</strong>: "X de Y anotações não encontradas"</li>
+    <li><strong>Sem filtro novo</strong>: a diferenciação visual basta</li>
+  </ul>
+</div>

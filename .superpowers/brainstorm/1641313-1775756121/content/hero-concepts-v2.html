@@ -1,0 +1,117 @@
+<h2>Probe Landing v2: 3 variações sem cápsula no topo</h2>
+<p class="subtitle">Mantendo: badges (bug/question/suggestion), markdown visível, conceito de "probe" no documento. Variando: como o probe se manifesta.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: linear-gradient(180deg, #0d1117 0%, #131720 40%, #1a1f2e 100%); padding: 2rem; min-height: 260px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;">
+      <!-- Document central -->
+      <div style="position: absolute; top: 12%; left: 18%; right: 18%; bottom: 12%; background: rgba(30,30,46,0.9); border: 1px solid rgba(137,180,250,0.25); border-radius: 8px; padding: 14px; box-shadow: 0 0 40px rgba(137,180,250,0.08);">
+        <div style="font-family: monospace; font-size: 9px; line-height: 1.8;">
+          <div style="color: #89b4fa; font-weight: bold;"># spec.md</div>
+          <div style="color: #6c7086;">## Requirements</div>
+          <div style="color: #585b70;">User authentication flow...</div>
+          <div style="color: #6c7086;">## Architecture</div>
+          <div style="color: #585b70; background: rgba(243,139,168,0.1); padding: 0 4px; border-left: 2px solid #f38ba8;">Rate limit: 100/min</div>
+          <div style="color: #585b70;">Database schema design...</div>
+          <div style="color: #6c7086;">## API Design</div>
+          <div style="color: #585b70; background: rgba(137,180,250,0.1); padding: 0 4px; border-left: 2px solid #89b4fa;">Auth via JWT tokens</div>
+          <div style="color: #585b70;">Endpoint definitions...</div>
+        </div>
+      </div>
+      <!-- Scan beam crossing the document -->
+      <div style="position: absolute; top: 48%; left: 10%; right: 10%; height: 2px; background: linear-gradient(90deg, transparent 0%, #89b4fa 20%, #89b4fa 80%, transparent 100%); box-shadow: 0 0 15px rgba(137,180,250,0.4), 0 0 30px rgba(137,180,250,0.15); opacity: 0.9;"></div>
+      <div style="position: absolute; top: 44%; left: 10%; right: 10%; height: 12px; background: linear-gradient(180deg, transparent, rgba(137,180,250,0.06), transparent);"></div>
+      <!-- Badges floating out from highlighted lines -->
+      <div style="position: absolute; right: 10%; top: 38%; background: rgba(243,139,168,0.2); border: 1px solid #f38ba8; border-radius: 4px; padding: 2px 8px; font-size: 9px; color: #f38ba8; font-family: monospace; box-shadow: 0 0 8px rgba(243,139,168,0.2);">bug</div>
+      <div style="position: absolute; right: 8%; top: 58%; background: rgba(137,180,250,0.2); border: 1px solid #89b4fa; border-radius: 4px; padding: 2px 8px; font-size: 9px; color: #89b4fa; font-family: monospace; box-shadow: 0 0 8px rgba(137,180,250,0.2);">question</div>
+      <div style="position: absolute; left: 10%; bottom: 18%; background: rgba(166,227,161,0.2); border: 1px solid #a6e3a1; border-radius: 4px; padding: 2px 8px; font-size: 9px; color: #a6e3a1; font-family: monospace; box-shadow: 0 0 8px rgba(166,227,161,0.2);">suggestion</div>
+      <div style="position: absolute; left: 8%; top: 28%; background: rgba(249,226,175,0.2); border: 1px solid #f9e2af; border-radius: 4px; padding: 2px 8px; font-size: 9px; color: #f9e2af; font-family: monospace; box-shadow: 0 0 8px rgba(249,226,175,0.2);">nitpick</div>
+    </div>
+    <div class="card-body">
+      <h3>A) Scan Beam</h3>
+      <p><strong>Feixe de luz horizontal varrendo o documento.</strong> O "probe" é o feixe — ele cruza o markdown e onde passa, badges emergem das linhas problemáticas. O documento é o protagonista.</p>
+      <p style="color: #a6adc8; font-size: 0.85em; margin-top: 0.5rem;">Probe = varredura invisível que revela issues.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: linear-gradient(180deg, #0d1117 0%, #131720 40%, #1a1f2e 100%); padding: 2rem; min-height: 260px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;">
+      <!-- Document with glowing edges (being probed) -->
+      <div style="position: absolute; top: 12%; left: 18%; right: 18%; bottom: 12%; background: rgba(30,30,46,0.9); border: 1px solid rgba(137,180,250,0.4); border-radius: 8px; padding: 14px; box-shadow: 0 0 20px rgba(137,180,250,0.1), inset 0 0 30px rgba(137,180,250,0.03);">
+        <div style="font-family: monospace; font-size: 9px; line-height: 1.8;">
+          <div style="color: #89b4fa; font-weight: bold;"># spec.md</div>
+          <div style="color: #6c7086;">## Requirements</div>
+          <div style="color: #585b70;">User authentication flow...</div>
+          <div style="color: #6c7086;">## Architecture</div>
+          <div style="color: #585b70;">Rate limit configuration...</div>
+          <div style="color: #6c7086;">## API Design</div>
+          <div style="color: #585b70;">Auth via JWT tokens...</div>
+          <div style="color: #6c7086;">## Database</div>
+          <div style="color: #585b70;">Schema definitions...</div>
+        </div>
+      </div>
+      <!-- Connection lines from doc to badges -->
+      <div style="position: absolute; top: 35%; right: 18%; width: 40px; height: 1px; background: linear-gradient(90deg, rgba(243,139,168,0.5), rgba(243,139,168,0.1)); transform-origin: left;"></div>
+      <div style="position: absolute; top: 52%; right: 18%; width: 50px; height: 1px; background: linear-gradient(90deg, rgba(137,180,250,0.5), rgba(137,180,250,0.1));"></div>
+      <div style="position: absolute; top: 68%; left: 18%; width: 45px; height: 1px; background: linear-gradient(270deg, rgba(166,227,161,0.5), rgba(166,227,161,0.1)); transform: rotate(180deg);"></div>
+      <!-- Badges at end of lines -->
+      <div style="position: absolute; right: 5%; top: 31%; background: rgba(243,139,168,0.15); border: 1px solid #f38ba8; border-radius: 6px; padding: 4px 10px; font-size: 9px; color: #f38ba8; font-family: monospace;">
+        <span style="font-size: 7px; opacity: 0.6;">L5</span> bug
+      </div>
+      <div style="position: absolute; right: 3%; top: 48%; background: rgba(137,180,250,0.15); border: 1px solid #89b4fa; border-radius: 6px; padding: 4px 10px; font-size: 9px; color: #89b4fa; font-family: monospace;">
+        <span style="font-size: 7px; opacity: 0.6;">L7</span> question
+      </div>
+      <div style="position: absolute; left: 3%; top: 64%; background: rgba(166,227,161,0.15); border: 1px solid #a6e3a1; border-radius: 6px; padding: 4px 10px; font-size: 9px; color: #a6e3a1; font-family: monospace;">
+        <span style="font-size: 7px; opacity: 0.6;">L9</span> suggestion
+      </div>
+      <!-- Subtle pulse rings around document -->
+      <div style="position: absolute; top: 10%; left: 16%; right: 16%; bottom: 10%; border: 1px solid rgba(137,180,250,0.08); border-radius: 12px;"></div>
+      <div style="position: absolute; top: 6%; left: 12%; right: 12%; bottom: 6%; border: 1px solid rgba(137,180,250,0.04); border-radius: 16px;"></div>
+    </div>
+    <div class="card-body">
+      <h3>B) Probe Field</h3>
+      <p><strong>Documento emitindo um campo de análise.</strong> O markdown é "probed" — pulsa com energia, e de cada linha problemática sai uma conexão para o badge correspondente com número da linha. Sem elemento externo — o probe é um estado do documento.</p>
+      <p style="color: #a6adc8; font-size: 0.85em; margin-top: 0.5rem;">Probe = o documento sendo analisado, irradiando findings.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: linear-gradient(180deg, #0d1117 0%, #131720 40%, #1a1f2e 100%); padding: 2rem; min-height: 260px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;">
+      <!-- Crosshair circles centered on document -->
+      <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; height: 200px; border: 1px solid rgba(137,180,250,0.12); border-radius: 50%;"></div>
+      <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 140px; height: 140px; border: 1px solid rgba(137,180,250,0.18); border-radius: 50%;"></div>
+      <!-- Document at center -->
+      <div style="position: absolute; top: 18%; left: 22%; right: 22%; bottom: 18%; background: rgba(30,30,46,0.95); border: 1px solid rgba(137,180,250,0.3); border-radius: 6px; padding: 12px; z-index: 2;">
+        <div style="font-family: monospace; font-size: 9px; line-height: 1.7;">
+          <div style="color: #89b4fa; font-weight: bold;"># spec.md</div>
+          <div style="color: #6c7086;">## Requirements</div>
+          <div style="color: #585b70;">User auth flow...</div>
+          <div style="color: #6c7086;">## Architecture</div>
+          <div style="color: #585b70; background: rgba(243,139,168,0.12); border-left: 2px solid #f38ba8; padding-left: 4px;">Rate limit: 100/min</div>
+          <div style="color: #6c7086;">## API Design</div>
+          <div style="color: #585b70; background: rgba(137,180,250,0.12); border-left: 2px solid #89b4fa; padding-left: 4px;">Auth via JWT</div>
+          <div style="color: #585b70; background: rgba(166,227,161,0.12); border-left: 2px solid #a6e3a1; padding-left: 4px;">REST endpoints</div>
+        </div>
+      </div>
+      <!-- Badges orbiting around the document -->
+      <div style="position: absolute; top: 10%; right: 12%; background: rgba(243,139,168,0.2); border: 1px solid #f38ba8; border-radius: 12px; padding: 3px 10px; font-size: 9px; color: #f38ba8; font-family: monospace; box-shadow: 0 0 10px rgba(243,139,168,0.15); z-index: 3;">bug</div>
+      <div style="position: absolute; top: 45%; right: 6%; background: rgba(137,180,250,0.2); border: 1px solid #89b4fa; border-radius: 12px; padding: 3px 10px; font-size: 9px; color: #89b4fa; font-family: monospace; box-shadow: 0 0 10px rgba(137,180,250,0.15); z-index: 3;">question</div>
+      <div style="position: absolute; bottom: 10%; left: 15%; background: rgba(166,227,161,0.2); border: 1px solid #a6e3a1; border-radius: 12px; padding: 3px 10px; font-size: 9px; color: #a6e3a1; font-family: monospace; box-shadow: 0 0 10px rgba(166,227,161,0.15); z-index: 3;">suggestion</div>
+      <div style="position: absolute; top: 20%; left: 8%; background: rgba(249,226,175,0.2); border: 1px solid #f9e2af; border-radius: 12px; padding: 3px 10px; font-size: 9px; color: #f9e2af; font-family: monospace; box-shadow: 0 0 10px rgba(249,226,175,0.15); z-index: 3;">nitpick</div>
+      <!-- Thin connecting lines from badges to doc -->
+      <div style="position: absolute; top: 14%; right: 22%; width: 30px; height: 1px; background: rgba(243,139,168,0.3); transform: rotate(25deg); z-index: 1;"></div>
+      <div style="position: absolute; bottom: 14%; left: 25%; width: 25px; height: 1px; background: rgba(166,227,161,0.3); transform: rotate(-15deg); z-index: 1;"></div>
+    </div>
+    <div class="card-body">
+      <h3>C) Orbit Probe</h3>
+      <p><strong>Documento no centro, badges orbitando como satélites.</strong> Retícula de mira sutil ao fundo. Lines highlighted no doc conectam aos badges orbitais. O "probe" é a constelação de findings ao redor do documento.</p>
+      <p style="color: #a6adc8; font-size: 0.85em; margin-top: 0.5rem;">Probe = sistema de análise em órbita, findings como satélites.</p>
+    </div>
+  </div>
+
+</div>
+
+<p style="margin-top: 1.5rem; color: #a6adc8; font-size: 0.9em;">
+  Todos mantêm: badges coloridos (bug/question/suggestion/nitpick), markdown visível com syntax highlighting, dark Catppuccin theme. Sem cápsula no topo.
+</p>
