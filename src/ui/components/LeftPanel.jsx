@@ -1,6 +1,6 @@
 import { leftPanelOpen, files, currentFile, currentToc, openAnnotations, sections } from '../state/store.js'
 
-export function LeftPanel({ onFileSelect }) {
+export function LeftPanel({ onFileSelect, onFileClose }) {
   const isCollapsed = !leftPanelOpen.value
 
   // Count open annotations whose startLine falls within this section's range
@@ -57,7 +57,17 @@ export function LeftPanel({ onFileSelect }) {
                     onClick={() => onFileSelect(path)}
                   >
                     <span class="icon">{'\uD83D\uDCC4'}</span>
-                    <span>{label}</span>
+                    <span class="file-label">{label}</span>
+                    {files.value.length > 1 && (
+                      <button
+                        class="file-close-btn"
+                        title="Close file"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onFileClose(path)
+                        }}
+                      >&times;</button>
+                    )}
                   </div>
                 )
               })}

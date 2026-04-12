@@ -79,6 +79,21 @@ function App() {
     annotationOps.fetchAnnotations(filePath)
   }
 
+  async function handleFileClose(filePath) {
+    await fetch('/api/remove-file', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file: filePath }),
+    })
+    // If we closed the active file, switch to the first remaining file
+    if (currentFile.value === filePath) {
+      const remaining = files.value.filter(f => (f.path || f) !== filePath)
+      if (remaining.length > 0) {
+        handleFileSelect(remaining[0].path || remaining[0])
+      }
+    }
+  }
+
   return (
     <>
       {/* Header */}
@@ -114,7 +129,7 @@ function App() {
       )}
 
       {/* Left Panel */}
-      <LeftPanel onFileSelect={handleFileSelect} />
+      <LeftPanel onFileSelect={handleFileSelect} onFileClose={handleFileClose} />
 
       {/* Content */}
       <Content annotationOps={annotationOps} />
