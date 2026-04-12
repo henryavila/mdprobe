@@ -294,6 +294,7 @@ export async function createServer(options) {
   // broadcastToAll and addFiles are defined below; forward-ref via closure
   let broadcastFn = () => {}
   let addFilesFn = () => {}
+  let removeFileFn = () => {}
   const handleRequest = createRequestHandler({
     resolvedFiles,
     assetBaseDir,
@@ -388,7 +389,6 @@ export async function createServer(options) {
     }
   }
 
-  let removeFileFn = () => {}
   removeFileFn = (basename) => {
     const idx = resolvedFiles.findIndex(f => node_path.basename(f) === basename)
     if (idx === -1) return { found: false }
