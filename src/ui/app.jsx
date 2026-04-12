@@ -80,11 +80,12 @@ function App() {
   }
 
   async function handleFileClose(filePath) {
-    await fetch('/api/remove-file', {
+    const res = await fetch('/api/remove-file', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ file: filePath }),
     })
+    if (!res.ok) return
     // If we closed the active file, switch to the first remaining file
     if (currentFile.value === filePath) {
       const remaining = files.value.filter(f => (f.path || f) !== filePath)

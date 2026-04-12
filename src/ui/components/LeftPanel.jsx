@@ -62,6 +62,7 @@ export function LeftPanel({ onFileSelect, onFileClose }) {
                       <button
                         class="file-close-btn"
                         title="Close file"
+                        aria-label="Close file"
                         onClick={(e) => {
                           e.stopPropagation()
                           onFileClose(path)

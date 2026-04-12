@@ -802,7 +802,7 @@ body {
   flex-shrink: 0;
 }
 
-.file-item .name {
+.file-item .file-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
