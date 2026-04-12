@@ -3,6 +3,7 @@ import node_fs from 'node:fs/promises'
 import node_path from 'node:path'
 import node_os from 'node:os'
 import node_http from 'node:http'
+import WebSocket from 'ws'
 import { createServer } from '../../src/server.js'
 import {
   readLockFile,
@@ -101,6 +102,27 @@ function httpDelete(url, data) {
     })
     req.on('error', reject)
     req.end(body)
+  })
+}
+
+function waitForOpen(ws) {
+  return new Promise((resolve, reject) => {
+    if (ws.readyState === WebSocket.OPEN) return resolve()
+    ws.once('open', resolve)
+    ws.once('error', reject)
+  })
+}
+
+function waitForMessage(ws, timeout = 2000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('Timeout waiting for WS message')),
+      timeout,
+    )
+    ws.once('message', (data) => {
+      clearTimeout(timer)
+      resolve(JSON.parse(data.toString()))
+    })
   })
 }
 
@@ -311,6 +333,29 @@ describe('DELETE /api/remove-file', () => {
 
     const res = await httpDelete(`${server.url}/api/remove-file`, {})
     expect(res.status).toBe(400)
+  })
+
+  it('broadcasts file-removed via WebSocket', async () => {
+    const specPath = await writeFixture('spec.md', '# Spec\n')
+    const rfcPath = await writeFixture('rfc.md', '# RFC\n')
+    const server = track(await createServer({
+      files: [specPath, rfcPath],
+      port: 0,
+      open: false,
+    }))
+
+    const { port } = server.address()
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`)
+    await waitForOpen(ws)
+
+    const msgPromise = waitForMessage(ws)
+    await httpDelete(`${server.url}/api/remove-file`, { file: 'rfc.md' })
+
+    const msg = await msgPromise
+    expect(msg.type).toBe('file-removed')
+    expect(msg.file).toBe('rfc.md')
+
+    ws.close()
   })
 })
 
