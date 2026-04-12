@@ -3,6 +3,7 @@ import node_fs from 'node:fs/promises'
 import node_path from 'node:path'
 import node_os from 'node:os'
 import node_http from 'node:http'
+import WebSocket from 'ws'
 import { createServer } from '../../src/server.js'
 import {
   readLockFile,
@@ -78,6 +79,50 @@ function httpPost(url, data) {
     })
     req.on('error', reject)
     req.end(body)
+  })
+}
+
+function httpDelete(url, data) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(data)
+    const parsed = new URL(url)
+    const req = node_http.request({
+      hostname: parsed.hostname,
+      port: parsed.port,
+      path: parsed.pathname,
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    }, (res) => {
+      let resBody = ''
+      res.on('data', (chunk) => { resBody += chunk })
+      res.on('end', () => resolve({ status: res.statusCode, body: resBody }))
+    })
+    req.on('error', reject)
+    req.end(body)
+  })
+}
+
+function waitForOpen(ws) {
+  return new Promise((resolve, reject) => {
+    if (ws.readyState === WebSocket.OPEN) return resolve()
+    ws.once('open', resolve)
+    ws.once('error', reject)
+  })
+}
+
+function waitForMessage(ws, timeout = 2000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('Timeout waiting for WS message')),
+      timeout,
+    )
+    ws.once('message', (data) => {
+      clearTimeout(timer)
+      resolve(JSON.parse(data.toString()))
+    })
   })
 }
 
@@ -190,6 +235,127 @@ describe('POST /api/add-files', () => {
     const names = filesList.map(f => f.path)
     expect(names).toContain('spec.md')
     expect(names).toContain('rfc.md')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// DELETE /api/remove-file endpoint
+// ---------------------------------------------------------------------------
+
+describe('DELETE /api/remove-file', () => {
+  it('removes a file from the server', async () => {
+    const specPath = await writeFixture('spec.md', '# Spec\n')
+    const rfcPath = await writeFixture('rfc.md', '# RFC\n')
+    const server = track(await createServer({
+      files: [specPath, rfcPath],
+      port: 0,
+      open: false,
+    }))
+
+    const res = await httpDelete(`${server.url}/api/remove-file`, { file: 'rfc.md' })
+    expect(res.status).toBe(200)
+
+    const json = JSON.parse(res.body)
+    expect(json.ok).toBe(true)
+    expect(json.files).toContain('spec.md')
+    expect(json.files).not.toContain('rfc.md')
+  })
+
+  it('returns 404 for unknown file', async () => {
+    const specPath = await writeFixture('spec.md', '# Spec\n')
+    const server = track(await createServer({
+      files: [specPath],
+      port: 0,
+      open: false,
+    }))
+
+    const res = await httpDelete(`${server.url}/api/remove-file`, { file: 'nope.md' })
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 400 when trying to remove the last file', async () => {
+    const specPath = await writeFixture('spec.md', '# Spec\n')
+    const server = track(await createServer({
+      files: [specPath],
+      port: 0,
+      open: false,
+    }))
+
+    const res = await httpDelete(`${server.url}/api/remove-file`, { file: 'spec.md' })
+    expect(res.status).toBe(400)
+
+    const json = JSON.parse(res.body)
+    expect(json.error).toMatch(/last file/i)
+  })
+
+  it('removed file disappears from /api/files', async () => {
+    const specPath = await writeFixture('spec.md', '# Spec\n')
+    const rfcPath = await writeFixture('rfc.md', '# RFC\n')
+    const server = track(await createServer({
+      files: [specPath, rfcPath],
+      port: 0,
+      open: false,
+    }))
+
+    await httpDelete(`${server.url}/api/remove-file`, { file: 'rfc.md' })
+
+    const filesRes = await httpGet(`${server.url}/api/files`)
+    const filesList = JSON.parse(filesRes.body)
+    const names = filesList.map(f => f.path)
+    expect(names).toContain('spec.md')
+    expect(names).not.toContain('rfc.md')
+  })
+
+  it('removed file can be re-added via /api/add-files', async () => {
+    const specPath = await writeFixture('spec.md', '# Spec\n')
+    const rfcPath = await writeFixture('rfc.md', '# RFC\n')
+    const server = track(await createServer({
+      files: [specPath, rfcPath],
+      port: 0,
+      open: false,
+    }))
+
+    await httpDelete(`${server.url}/api/remove-file`, { file: 'rfc.md' })
+    const addRes = await httpPost(`${server.url}/api/add-files`, { files: [rfcPath] })
+    const json = JSON.parse(addRes.body)
+    expect(json.ok).toBe(true)
+    expect(json.files).toContain('rfc.md')
+    expect(json.added).toContain('rfc.md')
+  })
+
+  it('returns 400 for missing file field', async () => {
+    const specPath = await writeFixture('spec.md', '# Spec\n')
+    const server = track(await createServer({
+      files: [specPath],
+      port: 0,
+      open: false,
+    }))
+
+    const res = await httpDelete(`${server.url}/api/remove-file`, {})
+    expect(res.status).toBe(400)
+  })
+
+  it('broadcasts file-removed via WebSocket', async () => {
+    const specPath = await writeFixture('spec.md', '# Spec\n')
+    const rfcPath = await writeFixture('rfc.md', '# RFC\n')
+    const server = track(await createServer({
+      files: [specPath, rfcPath],
+      port: 0,
+      open: false,
+    }))
+
+    const { port } = server.address()
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`)
+    await waitForOpen(ws)
+
+    const msgPromise = waitForMessage(ws)
+    await httpDelete(`${server.url}/api/remove-file`, { file: 'rfc.md' })
+
+    const msg = await msgPromise
+    expect(msg.type).toBe('file-removed')
+    expect(msg.file).toBe('rfc.md')
+
+    ws.close()
   })
 })
 

@@ -1,0 +1,250 @@
+<h2>Como mostrar o anchor status das annotations?</h2>
+<p class="subtitle">Quando drift é detectado, cada annotation é re-ancorada e classificada. Como surfacear isso na UI?</p>
+
+<div class="options">
+  <!-- Option A -->
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Status Badges nos Cards</h3>
+      <p>Cada annotation card no painel direito ganha um badge colorido indicando o status de ancoragem</p>
+
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-header">Right Panel — Annotations</div>
+        <div class="mockup-body" style="padding: 12px; background: #1e1e2e; font-family: system-ui;">
+
+          <!-- Enhanced Banner -->
+          <div style="background: #45475a; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #cdd6f4;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+              <span style="color: #f9e2af;">⚠</span>
+              <strong>Arquivo modificado</strong>
+            </div>
+            <div style="display:flex; gap:12px; font-size:11px;">
+              <span style="color: #a6e3a1;">● 5 ancoradas</span>
+              <span style="color: #f9e2af;">● 2 deslocadas</span>
+              <span style="color: #f38ba8;">● 1 órfã</span>
+            </div>
+          </div>
+
+          <!-- Anchored annotation -->
+          <div style="background: #313244; border-radius: 6px; padding: 10px; margin-bottom: 8px; border-left: 3px solid #89b4fa;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+              <span style="background: #89b4fa; color: #1e1e2e; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;">question</span>
+              <span style="color: #a6e3a1; font-size: 10px; display:flex; align-items:center; gap: 3px;">
+                ✓ ancorada
+              </span>
+            </div>
+            <div style="color: #a6adc8; font-size: 11px; font-style: italic; padding: 4px 8px; border-left: 2px solid #45475a; margin-bottom: 6px;">"This function handles..."</div>
+            <div style="color: #cdd6f4; font-size: 12px;">Esse trecho precisa de documentação</div>
+          </div>
+
+          <!-- Drifted annotation -->
+          <div style="background: #313244; border-radius: 6px; padding: 10px; margin-bottom: 8px; border-left: 3px solid #f9e2af;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+              <span style="background: #fab387; color: #1e1e2e; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;">suggestion</span>
+              <span style="color: #f9e2af; font-size: 10px; display:flex; align-items:center; gap: 3px;">
+                ↗ deslocada
+              </span>
+            </div>
+            <div style="color: #a6adc8; font-size: 11px; font-style: italic; padding: 4px 8px; border-left: 2px solid #f9e2af; margin-bottom: 6px;">"Use async/await instead..."</div>
+            <div style="color: #cdd6f4; font-size: 12px;">Considerar async/await aqui</div>
+          </div>
+
+          <!-- Orphaned annotation -->
+          <div style="background: #313244; border-radius: 6px; padding: 10px; border-left: 3px solid #f38ba8; opacity: 0.75;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+              <span style="background: #f38ba8; color: #1e1e2e; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;">bug</span>
+              <span style="color: #f38ba8; font-size: 10px; display:flex; align-items:center; gap: 3px;">
+                ✗ órfã
+              </span>
+            </div>
+            <div style="color: #a6adc8; font-size: 11px; font-style: italic; padding: 4px 8px; border-left: 2px solid #f38ba8; margin-bottom: 6px; text-decoration: line-through;">"old function name..."</div>
+            <div style="color: #cdd6f4; font-size: 12px;">Race condition no handler</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pros-cons" style="margin-top: 10px;">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Status visível sem precisar interagir</li>
+          <li>Cores da border-left mudam conforme status</li>
+          <li>Compatível com filtros existentes</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Orphans ficam misturadas com anchored</li>
+          <li>Com 20+ annotations, difícil achar as problemáticas</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Seção Separada para Orphans + Filtro por Status</h3>
+      <p>Annotations são agrupadas por anchor status. Orphans ficam em seção colapsável no final. Filtro novo por status.</p>
+
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-header">Right Panel — Grouped by Status</div>
+        <div class="mockup-body" style="padding: 12px; background: #1e1e2e; font-family: system-ui;">
+
+          <!-- Enhanced Banner -->
+          <div style="background: #45475a; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #cdd6f4;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+              <span style="color: #f9e2af;">⚠</span>
+              <strong>Arquivo modificado — 2 de 8 anotações afetadas</strong>
+            </div>
+            <div style="display:flex; gap: 6px; margin-top: 6px;">
+              <button style="background: #a6e3a1; color:#1e1e2e; border:none; padding:3px 10px; border-radius:10px; font-size:10px; cursor:pointer;">Ancoradas (5)</button>
+              <button style="background: #f9e2af; color:#1e1e2e; border:none; padding:3px 10px; border-radius:10px; font-size:10px; cursor:pointer;">Deslocadas (2)</button>
+              <button style="background: #f38ba8; color:#1e1e2e; border:none; padding:3px 10px; border-radius:10px; font-size:10px; cursor:pointer;">Órfãs (1)</button>
+            </div>
+          </div>
+
+          <!-- Filter bar -->
+          <div style="display:flex; gap:6px; margin-bottom: 10px; padding: 6px 0; border-bottom: 1px solid #45475a;">
+            <select style="background:#313244; color:#cdd6f4; border:1px solid #45475a; padding:4px 8px; border-radius:4px; font-size:11px;">
+              <option>⚓ Anchor status</option>
+              <option>Ancoradas</option>
+              <option>Deslocadas</option>
+              <option>Órfãs</option>
+            </select>
+            <select style="background:#313244; color:#cdd6f4; border:1px solid #45475a; padding:4px 8px; border-radius:4px; font-size:11px;">
+              <option>🏷 Tag</option>
+            </select>
+          </div>
+
+          <!-- Normal annotations -->
+          <div style="background: #313244; border-radius: 6px; padding: 10px; margin-bottom: 6px; border-left: 3px solid #89b4fa;">
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
+              <span style="background: #89b4fa; color: #1e1e2e; padding: 2px 8px; border-radius: 10px; font-weight: 600;">question</span>
+              <span style="color:#bac2de;">@henry</span>
+            </div>
+            <div style="color: #cdd6f4; font-size: 12px; margin-top: 6px;">Esse trecho precisa de documentação</div>
+          </div>
+
+          <div style="background: #313244; border-radius: 6px; padding: 10px; margin-bottom: 10px; border-left: 3px solid #f9e2af;">
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
+              <span style="background: #fab387; color: #1e1e2e; padding: 2px 8px; border-radius: 10px; font-weight: 600;">suggestion</span>
+              <span style="color:#f9e2af; font-size:10px;">↗ deslocada</span>
+            </div>
+            <div style="color: #cdd6f4; font-size: 12px; margin-top: 6px;">Considerar async/await</div>
+          </div>
+
+          <!-- Orphaned section -->
+          <div style="border: 1px dashed #f38ba8; border-radius: 6px; padding: 10px; margin-top: 8px;">
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom: 8px; cursor:pointer;">
+              <span style="color: #f38ba8; font-size:11px;">▾</span>
+              <span style="color: #f38ba8; font-size: 12px; font-weight: 600;">Órfãs (1)</span>
+              <span style="color: #a6adc8; font-size: 10px;">— texto original não encontrado</span>
+            </div>
+            <div style="background: #313244; border-radius: 6px; padding: 10px; opacity: 0.7; border-left: 3px solid #f38ba8;">
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
+                <span style="background: #f38ba8; color: #1e1e2e; padding: 2px 8px; border-radius: 10px; font-weight: 600;">bug</span>
+                <span style="color:#f38ba8; font-size:10px;">✗ órfã</span>
+              </div>
+              <div style="color: #a6adc8; font-size: 11px; font-style: italic; text-decoration: line-through; margin-top: 4px;">"old function name..."</div>
+              <div style="color: #cdd6f4; font-size: 12px; margin-top: 4px;">Race condition no handler</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pros-cons" style="margin-top: 10px;">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Orphans claramente separadas</li>
+          <li>Filtro permite focar nos problemas</li>
+          <li>Banner mostra contagem exata</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Mais complexidade na UI</li>
+          <li>Seção colapsável pode passar despercebida</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option C -->
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Banner Interativo + Highlights Diferenciados</h3>
+      <p>Banner com contagem clicável que filtra. Highlights no conteúdo mudam de cor por status. Sem mudança estrutural no painel.</p>
+
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-header">Content Area — Highlights por Status</div>
+        <div class="mockup-body" style="padding: 16px; background: #1e1e2e; font-family: 'Fira Code', monospace; font-size: 13px; line-height: 1.8;">
+
+          <!-- Enhanced Banner spanning full width -->
+          <div style="background: #45475a; border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; font-size: 12px; color: #cdd6f4; font-family: system-ui;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="color: #f9e2af;">⚠</span>
+              <span>Arquivo modificado —</span>
+              <span style="color: #a6e3a1; cursor:pointer; text-decoration:underline;">5 ancoradas</span>
+              <span style="color: #a6adc8;">·</span>
+              <span style="color: #f9e2af; cursor:pointer; text-decoration:underline;">2 deslocadas</span>
+              <span style="color: #a6adc8;">·</span>
+              <span style="color: #f38ba8; cursor:pointer; text-decoration:underline;">1 órfã</span>
+            </div>
+          </div>
+
+          <!-- Simulated markdown content with highlights -->
+          <div style="color: #cdd6f4;">
+            <div style="color: #89b4fa; font-size: 16px; font-weight: bold; margin-bottom: 8px; font-family: system-ui;"># API Reference</div>
+            <br>
+            <div>The <code style="background:#313244; padding:2px 6px; border-radius:3px;">createServer()</code> function initializes</div>
+            <div>the HTTP server with the given configuration.</div>
+            <br>
+            <div>
+              <!-- Anchored highlight - normal green/blue -->
+              <span style="background: rgba(137, 180, 250, 0.2); border-bottom: 2px solid #89b4fa; padding: 1px 0;">This function handles request routing</span>
+              <span style="display:inline-block; background:#89b4fa; color:#1e1e2e; font-size:8px; padding:1px 4px; border-radius:3px; vertical-align:super; font-family:system-ui;">Q</span>
+            </div>
+            <div>and middleware composition for all endpoints.</div>
+            <br>
+            <div>
+              <!-- Drifted highlight - yellow/warning -->
+              <span style="background: rgba(249, 226, 175, 0.15); border-bottom: 2px dashed #f9e2af; padding: 1px 0;">Use async/await instead of callbacks</span>
+              <span style="display:inline-block; background:#f9e2af; color:#1e1e2e; font-size:8px; padding:1px 4px; border-radius:3px; vertical-align:super; font-family:system-ui;">S ↗</span>
+            </div>
+            <div>for better error handling and readability.</div>
+            <br>
+            <div style="color: #89b4fa; font-size: 14px; font-weight: bold; margin: 8px 0; font-family: system-ui;">## Error Handling</div>
+            <br>
+            <div>
+              <!-- Orphaned highlight - red/strikethrough, no anchor in content -->
+              <span style="display:inline-block; background: rgba(243, 139, 168, 0.1); border: 1px dashed #f38ba8; border-radius: 3px; padding: 2px 8px; color: #a6adc8; text-decoration: line-through; font-style: italic;">
+                "old function name..."
+              </span>
+              <span style="display:inline-block; background:#f38ba8; color:#1e1e2e; font-size:8px; padding:1px 4px; border-radius:3px; vertical-align:super; font-family:system-ui;">B ✗</span>
+            </div>
+            <div style="color:#a6adc8; font-size:11px; font-style:italic; margin-top:2px; font-family:system-ui;">↑ Annotation órfã — texto original removido</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pros-cons" style="margin-top: 10px;">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Máxima visibilidade — status aparece no highlight</li>
+          <li>Banner clicável filtra por tipo</li>
+          <li>Orphans visíveis inline no conteúdo</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Highlight logic em Content.jsx fica mais complexa</li>
+          <li>Orphans sem posição — onde renderizar inline?</li>
+          <li>Muita informação visual pode poluir</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 20px; padding: 16px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+  <h3>Contexto Técnico</h3>
+  <p style="font-size: 13px; line-height: 1.6;">
+    <code>reanchorAll()</code> já retorna <code>Map&lt;id, {status: 'position'|'exact'|'fuzzy'|'orphan'}&gt;</code>.<br>
+    O gap é surfacear esse resultado na UI. A issue propõe mapear:<br>
+    <strong>position/exact → anchored</strong> · <strong>fuzzy → drifted</strong> · <strong>orphan → orphaned</strong>
+  </p>
+</div>
