@@ -284,7 +284,7 @@ export async function createServer(options) {
     : process.cwd()
 
   // 2. Find an available port
-  const actualPort = await findAvailablePort(preferredPort)
+  let actualPort = await findAvailablePort(preferredPort)
   if (actualPort !== preferredPort) {
     tel.log('port_search', { requested: preferredPort, chosen: actualPort })
   }
@@ -304,6 +304,7 @@ export async function createServer(options) {
     getOnFinish: () => onFinishCallback,
     broadcast: (msg) => broadcastFn(msg),
     addFiles: (paths) => addFilesFn(paths),
+    removeFile: (basename) => removeFileFn(basename),
   })
 
   // 4. Create HTTP server
@@ -342,6 +343,10 @@ export async function createServer(options) {
       resolve()
     })
   })
+  // When port 0 is requested, resolve the OS-assigned port
+  if (actualPort === 0) {
+    actualPort = httpServer.address().port
+  }
   tel.log('listen', { port: actualPort, url: `http://127.0.0.1:${actualPort}`, fileCount: resolvedFiles.length })
 
   // 7. Set up file watcher for live reload
@@ -381,6 +386,34 @@ export async function createServer(options) {
         broadcastToAll({ type: 'file-added', file: node_path.basename(abs) })
       }
     }
+  }
+
+  let removeFileFn = () => {}
+  removeFileFn = (basename) => {
+    const idx = resolvedFiles.findIndex(f => node_path.basename(f) === basename)
+    if (idx === -1) return { found: false }
+    if (resolvedFiles.length <= 1) return { lastFile: true }
+
+    const absPath = resolvedFiles[idx]
+    resolvedFiles.splice(idx, 1)
+
+    // Clear any pending debounce timer for this file
+    for (const [timerPath, timer] of debounceTimers.entries()) {
+      if (node_path.basename(timerPath) === basename) {
+        clearTimeout(timer)
+        debounceTimers.delete(timerPath)
+      }
+    }
+
+    // Unwatch directory if no other files reference it
+    const dir = node_path.dirname(absPath)
+    const dirStillNeeded = resolvedFiles.some(f => node_path.dirname(f) === dir)
+    if (!dirStillNeeded) {
+      watcher.unwatch(dir)
+    }
+
+    broadcastToAll({ type: 'file-removed', file: basename })
+    return { found: true, removed: basename }
   }
 
   watcher.on('change', (filePath) => {
@@ -454,6 +487,7 @@ export async function createServer(options) {
     addFiles: addFilesFn,
     getFiles: () => resolvedFiles.map(f => node_path.basename(f)),
     broadcast: (msg) => broadcastToAll(msg),
+    removeFile: (basename) => removeFileFn(basename),
     close: (cb) => {
       // Clear all debounce timers
       for (const timer of debounceTimers.values()) clearTimeout(timer)
@@ -500,7 +534,7 @@ export async function createServer(options) {
  * @param {string} [ctx.author]
  * @returns {(req: node_http.IncomingMessage, res: node_http.ServerResponse) => void}
  */
-function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port, buildHash, getOnFinish, broadcast, addFiles }) {
+function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port, buildHash, getOnFinish, broadcast, addFiles, removeFile }) {
   return async (req, res) => {
     try {
       const parsedUrl = new URL(req.url, `http://${req.headers.host}`)
@@ -778,6 +812,26 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
           ok: true,
           files: resolvedFiles.map(f => node_path.basename(f)),
           added,
+        })
+      }
+
+      // DELETE /api/remove-file — remove a file from the server
+      if (req.method === 'DELETE' && pathname === '/api/remove-file') {
+        const body = await readBody(req)
+        const { file } = body
+        if (!file || typeof file !== 'string') {
+          return sendJSON(res, 400, { error: 'Missing or invalid file field' })
+        }
+        const result = removeFile(file)
+        if (result.lastFile) {
+          return sendJSON(res, 400, { error: 'Cannot remove the last file' })
+        }
+        if (!result.found) {
+          return sendJSON(res, 404, { error: `File not found: ${file}` })
+        }
+        return sendJSON(res, 200, {
+          ok: true,
+          files: resolvedFiles.map(f => node_path.basename(f)),
         })
       }
 
