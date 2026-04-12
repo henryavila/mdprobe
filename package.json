@@ -1,6 +1,6 @@
 {
   "name": "@henryavila/mdprobe",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Markdown viewer + reviewer for terminal/WSL with live reload, persistent annotations, and AI agent integration",
   "type": "module",
   "bin": {
@@ -17,6 +17,7 @@
     "src/",
     "dist/",
     "schema.json",
+    "scripts/",
     "skills/",
     "templates/"
   ],
@@ -27,7 +28,8 @@
     "test:integration": "vitest run tests/integration",
     "test:coverage": "vitest run --coverage",
     "build:ui": "vite build",
-    "dev:ui": "vite dev"
+    "dev:ui": "vite dev",
+    "postinstall": "node scripts/postinstall.js"
   },
   "dependencies": {
     "@clack/prompts": "^1.2.0",

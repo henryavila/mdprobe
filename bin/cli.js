@@ -113,7 +113,7 @@ async function main() {
   // ---- config subcommand ----
   if (subcommand === 'config') {
     const key = args[1]
-    const value = args[2]
+    const value = args.length > 2 ? args.slice(2).join(' ') : undefined
 
     if (!key) {
       // Print all config

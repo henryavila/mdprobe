@@ -24,9 +24,15 @@ export async function runSetup(args) {
   const isRemove = args.includes('--remove')
   const isNonInteractive = args.includes('--yes')
   const authorIdx = args.indexOf('--author')
-  const authorFlag = (authorIdx !== -1 && args[authorIdx + 1] && !args[authorIdx + 1].startsWith('-'))
-    ? args[authorIdx + 1]
-    : undefined
+  let authorFlag
+  if (authorIdx !== -1) {
+    const parts = []
+    for (let i = authorIdx + 1; i < args.length; i++) {
+      if (args[i].startsWith('-')) break
+      parts.push(args[i])
+    }
+    authorFlag = parts.length > 0 ? parts.join(' ') : undefined
+  }
 
   if (isRemove) {
     const s = spinner()

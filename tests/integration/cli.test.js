@@ -257,6 +257,14 @@ describe('Config subcommand', () => {
     expect(result.stdout).toContain('Henry')
   })
 
+  it('config author with multi-word value joins all args', async () => {
+    await run(['config', 'author', 'Henry', 'Ávila'])
+
+    const result = await run(['config', 'author'])
+    expect(result.code).toBe(0)
+    expect(result.stdout.trim()).toBe('Henry Ávila')
+  })
+
   it('`config` with no key prints all config to stdout', async () => {
     await run(['config', 'author', 'Henry'])
     const result = await run(['config'])
