@@ -1,8 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { resolve, basename, dirname } from 'node:path'
+import { resolve, basename, dirname, join } from 'node:path'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { createServer } from './server.js'
 import { openBrowser } from './open-browser.js'
 import { AnnotationFile } from './annotations.js'
@@ -63,10 +64,12 @@ export function validateViewParams(params) {
   if (!hasPaths && !hasContent) {
     return { error: 'Either paths or content must be provided.' }
   }
-  if (hasContent && !params.filename) {
-    return { error: 'filename is required when content is provided.' }
-  }
   return { mode: hasPaths ? 'paths' : 'content' }
+}
+
+export function generateContentFilename(content) {
+  const hash = hashContent(content).slice(0, 8)
+  return join(tmpdir(), 'mdprobe', `draft-${hash}.md`)
 }
 
 export async function saveContentToFile(content, filename) {
@@ -91,7 +94,7 @@ export async function startMcpServer() {
     inputSchema: z.object({
       paths: z.array(z.string()).optional().describe('Paths to .md files (relative or absolute)'),
       content: z.string().optional().describe('Raw markdown content to save and open'),
-      filename: z.string().optional().describe('Filename to save content to (required with content)'),
+      filename: z.string().optional().describe('Filename to save content to (auto-generated if omitted)'),
       open: z.boolean().optional().default(true).describe('Auto-open browser'),
     }),
   }, async (params) => {
@@ -109,7 +112,8 @@ export async function startMcpServer() {
     let savedTo
 
     if (validation.mode === 'content') {
-      const result = await saveContentToFile(params.content, params.filename)
+      const filename = params.filename || generateContentFilename(params.content)
+      const result = await saveContentToFile(params.content, filename)
       savedTo = result.savedTo
       resolved = [savedTo]
     } else {

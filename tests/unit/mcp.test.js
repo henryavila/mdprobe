@@ -185,6 +185,37 @@ describe('MCP tool handlers (via HTTP API)', () => {
   })
 })
 
+describe('generateContentFilename()', () => {
+  it('generates a filename in os.tmpdir()/mdprobe/', async () => {
+    const { generateContentFilename } = await import('../../src/mcp.js')
+    const result = generateContentFilename('# Hello World')
+    expect(result).toMatch(/^.*[/\\]mdprobe[/\\]draft-[a-f0-9]{8}\.md$/)
+  })
+
+  it('is deterministic — same content produces same filename', async () => {
+    const { generateContentFilename } = await import('../../src/mcp.js')
+    const a = generateContentFilename('# Same content')
+    const b = generateContentFilename('# Same content')
+    expect(a).toBe(b)
+  })
+
+  it('different content produces different filename', async () => {
+    const { generateContentFilename } = await import('../../src/mcp.js')
+    const a = generateContentFilename('# Content A')
+    const b = generateContentFilename('# Content B')
+    expect(a).not.toBe(b)
+  })
+
+  it('uses first 8 chars of hash', async () => {
+    const { generateContentFilename } = await import('../../src/mcp.js')
+    const { hashContent } = await import('../../src/hash.js')
+    const content = '# Test hash length'
+    const expectedHash = hashContent(content).slice(0, 8)
+    const result = generateContentFilename(content)
+    expect(result).toContain(`draft-${expectedHash}.md`)
+  })
+})
+
 describe('mdprobe_view content parameter validation', () => {
   let tmp
 
@@ -205,10 +236,11 @@ describe('mdprobe_view content parameter validation', () => {
     expect(saved).toBe(content)
   })
 
-  it('returns error when content provided without filename', async () => {
+  it('accepts content without filename (auto-generates)', async () => {
     const { validateViewParams } = await import('../../src/mcp.js')
     const result = validateViewParams({ content: '# Hello' })
-    expect(result.error).toMatch(/filename.*required/i)
+    expect(result.error).toBeUndefined()
+    expect(result.mode).toBe('content')
   })
 
   it('returns error when both paths and content provided', async () => {
@@ -233,6 +265,20 @@ describe('mdprobe_view content parameter validation', () => {
     const mcpSource = await readFile(join(__dirname, '../../src/mcp.js'), 'utf-8')
     // mdprobe_view description must lead with Preview, not "Open content for human review"
     expect(mcpSource).toMatch(/description:\s*'Preview/)
+  })
+
+  it('saves content with auto-generated filename to tmpdir', async () => {
+    const { saveContentToFile, generateContentFilename } = await import('../../src/mcp.js')
+    const content = '# Auto-generated filename test'
+    const autoFilename = generateContentFilename(content)
+    const result = await saveContentToFile(content, autoFilename)
+
+    expect(result.savedTo).toBe(resolve(autoFilename))
+    const saved = await readFile(autoFilename, 'utf-8')
+    expect(saved).toBe(content)
+
+    // Cleanup
+    await rm(autoFilename, { force: true })
   })
 
   it('overwrites existing file with content', async () => {
