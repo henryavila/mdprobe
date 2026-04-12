@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { writeFileSync } from 'node:fs'
 
 const message = `
   \x1b[1mmdProbe\x1b[0m installed successfully!
@@ -12,4 +13,20 @@ const message = `
     mdprobe setup
 `
 
-console.log(message)
+function printInstallBanner(text) {
+  const targets = process.platform === 'win32' ? ['CONOUT$'] : ['/dev/tty']
+
+  for (const target of targets) {
+    try {
+      // npm 10 backgrounds lifecycle scripts and hides stdout on success.
+      writeFileSync(target, text)
+      return
+    } catch {
+      // Fall through to the next target or stdout fallback.
+    }
+  }
+
+  process.stdout.write(text)
+}
+
+printInstallBanner(message)

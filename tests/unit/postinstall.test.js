@@ -1,43 +1,69 @@
-import { describe, it, expect } from 'vitest'
-import { execFile } from 'node:child_process'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { dirname, join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+
+const { writeFileSync } = vi.hoisted(() => ({
+  writeFileSync: vi.fn()
+}))
+
+vi.mock('node:fs', () => ({
+  writeFileSync
+}))
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const PROJECT_ROOT = join(__dirname, '..', '..')
-const SCRIPT_PATH = join(PROJECT_ROOT, 'scripts', 'postinstall.js')
-const NODE = process.execPath
+const SCRIPT_PATH = join(__dirname, '..', '..', 'scripts', 'postinstall.js')
+const SCRIPT_URL = pathToFileURL(SCRIPT_PATH).href
 
-function runScript() {
-  return new Promise((resolve) => {
-    execFile(NODE, [SCRIPT_PATH], { timeout: 5000 }, (error, stdout, stderr) => {
-      resolve({ stdout: stdout || '', stderr: stderr || '', code: error ? error.code ?? 1 : 0 })
-    })
+async function runPostinstallScript() {
+  vi.resetModules()
+
+  let stdout = ''
+  const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+    stdout += String(chunk)
+    return true
   })
+
+  try {
+    await import(`${SCRIPT_URL}?run=${Date.now()}-${Math.random()}`)
+  } finally {
+    stdoutSpy.mockRestore()
+  }
+
+  return {
+    stdout,
+    ttyWrites: writeFileSync.mock.calls
+  }
 }
 
 describe('postinstall script', () => {
-  it('exits with code 0', async () => {
-    const result = await runScript()
-    expect(result.code).toBe(0)
+  afterEach(() => {
+    vi.restoreAllMocks()
+    writeFileSync.mockReset()
   })
 
-  it('shows CLI usage examples', async () => {
-    const result = await runScript()
-    const output = result.stdout
-    expect(output).toContain('mdprobe doc.md')
-    expect(output).toContain('mdprobe docs/')
+  it('writes the install banner directly to /dev/tty when an interactive terminal is available', async () => {
+    const result = await runPostinstallScript()
+
+    expect(writeFileSync).toHaveBeenCalledTimes(1)
+    expect(writeFileSync.mock.calls[0][0]).toBe('/dev/tty')
+    expect(writeFileSync.mock.calls[0][1]).toContain('installed successfully!')
+    expect(writeFileSync.mock.calls[0][1]).toContain('mdprobe setup')
+    expect(result.stdout).toBe('')
   })
 
-  it('tells user to run setup for AI integration', async () => {
-    const result = await runScript()
-    const output = result.stdout
-    expect(output).toContain('mdprobe setup')
-  })
+  it('falls back to stdout when /dev/tty is unavailable', async () => {
+    writeFileSync.mockImplementation(() => {
+      const error = new Error('tty unavailable')
+      error.code = 'ENXIO'
+      throw error
+    })
 
-  it('includes the package name', async () => {
-    const result = await runScript()
-    const output = result.stdout
-    expect(output).toMatch(/mdprobe/i)
+    const result = await runPostinstallScript()
+
+    expect(writeFileSync).toHaveBeenCalledWith('/dev/tty', expect.any(String))
+    expect(result.stdout).toContain('mdprobe doc.md')
+    expect(result.stdout).toContain('mdprobe docs/')
+    expect(result.stdout).toContain('mdprobe setup')
+    expect(result.stdout).toMatch(/mdprobe/i)
   })
 })
