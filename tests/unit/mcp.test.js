@@ -216,6 +216,72 @@ describe('generateContentFilename()', () => {
   })
 })
 
+describe('normalizeContentFilename()', () => {
+  it('appends .md when filename has no extension', async () => {
+    const { normalizeContentFilename } = await import('../../src/mcp.js')
+    const result = normalizeContentFilename('revisao-pendencias-consolidada')
+    expect(result).toMatch(/revisao-pendencias-consolidada\.md$/)
+  })
+
+  it('keeps .md when already present', async () => {
+    const { normalizeContentFilename } = await import('../../src/mcp.js')
+    const result = normalizeContentFilename('analysis.md')
+    expect(result).not.toMatch(/\.md\.md$/)
+    expect(result).toMatch(/analysis\.md$/)
+  })
+
+  it('moves bare filename to tmpdir/mdprobe/', async () => {
+    const { normalizeContentFilename } = await import('../../src/mcp.js')
+    const result = normalizeContentFilename('my-draft')
+    expect(result).toMatch(/[/\\]mdprobe[/\\]my-draft\.md$/)
+    expect(result).not.toContain(process.cwd())
+  })
+
+  it('moves bare filename with .md to tmpdir/mdprobe/', async () => {
+    const { normalizeContentFilename } = await import('../../src/mcp.js')
+    const result = normalizeContentFilename('spec.md')
+    expect(result).toMatch(/[/\\]mdprobe[/\\]spec\.md$/)
+  })
+
+  it('preserves absolute path as-is (only appends .md if needed)', async () => {
+    const { normalizeContentFilename } = await import('../../src/mcp.js')
+    const result = normalizeContentFilename('/home/user/docs/report')
+    expect(result).toBe('/home/user/docs/report.md')
+  })
+
+  it('preserves absolute path with .md untouched', async () => {
+    const { normalizeContentFilename } = await import('../../src/mcp.js')
+    const result = normalizeContentFilename('/home/user/docs/report.md')
+    expect(result).toBe('/home/user/docs/report.md')
+  })
+
+  it('preserves relative path with directory components', async () => {
+    const { normalizeContentFilename } = await import('../../src/mcp.js')
+    const result = normalizeContentFilename('docs/spec')
+    expect(result).toBe('docs/spec.md')
+  })
+
+  it('handles .markdown extension as valid (no double extension)', async () => {
+    const { normalizeContentFilename } = await import('../../src/mcp.js')
+    const result = normalizeContentFilename('notes.markdown')
+    expect(result).toMatch(/notes\.markdown$/)
+    expect(result).not.toMatch(/\.md$/)
+  })
+
+  it('handles filename with dots but no md extension', async () => {
+    const { normalizeContentFilename } = await import('../../src/mcp.js')
+    const result = normalizeContentFilename('v2.1-release-notes')
+    expect(result).toMatch(/v2\.1-release-notes\.md$/)
+  })
+
+  it('handles filename ending with .mdx', async () => {
+    const { normalizeContentFilename } = await import('../../src/mcp.js')
+    const result = normalizeContentFilename('component.mdx')
+    expect(result).toMatch(/component\.mdx$/)
+    expect(result).not.toMatch(/\.md$/)
+  })
+})
+
 describe('mdprobe_view content parameter validation', () => {
   let tmp
 
