@@ -52,6 +52,8 @@ function App() {
           const fp = f.path || f
           return fp === cleaned ||
             fp === cleaned.split('/').pop() ||
+            (f.label && f.label === cleaned) ||
+            (f.label && f.label === cleaned.split('/').pop()) ||
             (f.absPath && f.absPath.endsWith('/' + cleaned))
         })
       }

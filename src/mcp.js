@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { resolve, basename, dirname, join } from 'node:path'
+import { resolve, basename, dirname, join, extname } from 'node:path'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { createServer } from './server.js'
@@ -72,6 +72,25 @@ export function generateContentFilename(content) {
   return join(tmpdir(), 'mdprobe', `draft-${hash}.md`)
 }
 
+const MD_EXTENSIONS = ['.md', '.markdown', '.mdx']
+
+/**
+ * Normalize a user-provided filename for content mode:
+ * - Append .md if no recognized markdown extension
+ * - Move bare filenames (no directory) to tmpdir/mdprobe/
+ */
+export function normalizeContentFilename(filename) {
+  const ext = extname(filename)
+  const hasMarkdownExt = MD_EXTENSIONS.includes(ext)
+  const normalized = hasMarkdownExt ? filename : filename + '.md'
+
+  // Bare filename (no directory separator) → put in stable tmpdir
+  if (!normalized.includes('/') && !normalized.includes('\\')) {
+    return join(tmpdir(), 'mdprobe', normalized)
+  }
+  return normalized
+}
+
 export async function saveContentToFile(content, filename) {
   const absPath = resolve(filename)
   await mkdir(dirname(absPath), { recursive: true })
@@ -112,7 +131,9 @@ export async function startMcpServer() {
     let savedTo
 
     if (validation.mode === 'content') {
-      const filename = params.filename || generateContentFilename(params.content)
+      const filename = params.filename
+        ? normalizeContentFilename(params.filename)
+        : generateContentFilename(params.content)
       const result = await saveContentToFile(params.content, filename)
       savedTo = result.savedTo
       resolved = [savedTo]
