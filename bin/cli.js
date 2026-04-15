@@ -338,8 +338,9 @@ async function main() {
   }
 
   // --- Singleton mode: reuse existing server if running ---
+  const lockPath = process.env.MDPROBE_LOCK_PATH || undefined
   try {
-    const existing = await discoverExistingServer()
+    const existing = await discoverExistingServer(lockPath)
 
     if (existing) {
       console.log(`Found running mdprobe at ${existing.url}`)
@@ -371,8 +372,8 @@ async function main() {
       port: server.port,
       url: server.url,
       startedAt: new Date().toISOString(),
-    })
-    registerShutdownHandlers(server, undefined, () => {
+    }, lockPath)
+    registerShutdownHandlers(server, lockPath, () => {
       tel.log('exit', { code: 0, reason: 'shutdown' })
     })
 
