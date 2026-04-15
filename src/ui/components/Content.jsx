@@ -45,9 +45,7 @@ export function Content({ annotationOps }) {
       if (tryCrossElementHighlight(el, sourceEl, endLine, exact, ann.id, markClass)) continue
 
       // Strategy 3: Fallback — highlight all text in line range
-      if (startLine !== endLine) {
-        highlightLineRange(el, startLine, endLine, ann.id, markClass)
-      }
+      highlightLineRange(el, startLine, endLine, ann.id, markClass)
     }
   }, [currentHtml.value, annotations.value, showResolved.value, selectedAnnotationId.value])
 
@@ -219,7 +217,8 @@ export function Content({ annotationOps }) {
    * then wrap each matching portion in its own <mark>.
    */
   function tryCrossElementHighlight(contentEl, sourceEl, endLine, exact, id, className) {
-    // Collect text nodes from sourceEl through endLine
+    // Collect text nodes from sourceEl through endLine (skip whitespace-only nodes
+    // that exist between block elements, e.g. \n between <ul> and <li>)
     const textNodes = []
     const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT)
     let node
@@ -227,6 +226,7 @@ export function Content({ annotationOps }) {
     while ((node = walker.nextNode())) {
       if (!collecting && sourceEl.contains(node)) collecting = true
       if (!collecting) continue
+      if (node.textContent.trim() === '') continue
       textNodes.push(node)
       // Stop after passing endLine element
       const parent = findSourceLineParent(node, contentEl)

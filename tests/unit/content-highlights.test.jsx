@@ -176,6 +176,84 @@ describe('Content highlight injection', () => {
   // Fallback: when exact text doesn't match (whitespace differences)
   // -------------------------------------------------------------------------
 
+  // -------------------------------------------------------------------------
+  // BUG: single-line annotations with inline code elements get no highlight
+  // When text is split by <code>, trySingleElementHighlight fails (no single
+  // text node has the full text), tryCrossElementHighlight fails (TreeWalker
+  // limitation), and highlightLineRange is skipped because startLine === endLine.
+  // Fix: allow highlightLineRange fallback even for single-line annotations.
+  // -------------------------------------------------------------------------
+
+  it('highlights single-line text split by inline code elements', async () => {
+    currentHtml.value = [
+      '<p data-source-line="3">First <code data-source-line="3" data-source-col="7">paragraph</code> text</p>',
+      '<p data-source-line="5">Second part</p>',
+    ].join('')
+
+    annotations.value = [
+      {
+        id: 'inline1',
+        status: 'open',
+        tag: 'bug',
+        comment: 'text split by inline code',
+        selectors: {
+          position: { startLine: 3, endLine: 3 },
+          quote: { exact: 'First paragraph text' },
+        },
+      },
+    ]
+
+    let container
+    await act(() => {
+      const result = render(<Content annotationOps={noop} />)
+      container = result.container
+    })
+
+    const marks = container.querySelectorAll('mark[data-highlight-id="inline1"]')
+    expect(marks.length).toBeGreaterThan(0)
+
+    // Marks should contain the annotated text portions
+    const allText = [...marks].map((m) => m.textContent).join('')
+    expect(allText).toContain('First')
+    expect(allText).toContain('text')
+  })
+
+  it('does not wrap whitespace-only text nodes in line-range fallback', async () => {
+    // ul/li structure where whitespace \n nodes exist between block elements
+    currentHtml.value =
+      '<ul data-source-line="1">\n' +
+      '<li data-source-line="1">Item one</li>\n' +
+      '<li data-source-line="2">Item two</li>\n' +
+      '</ul>'
+
+    annotations.value = [
+      {
+        id: 'ws1',
+        status: 'open',
+        tag: 'bug',
+        comment: 'should skip whitespace nodes',
+        selectors: {
+          position: { startLine: 1, endLine: 2 },
+          quote: { exact: 'Item one\nItem two' },
+        },
+      },
+    ]
+
+    let container
+    await act(() => {
+      const result = render(<Content annotationOps={noop} />)
+      container = result.container
+    })
+
+    const marks = container.querySelectorAll('mark[data-highlight-id="ws1"]')
+    expect(marks.length).toBeGreaterThan(0)
+
+    // No mark should contain only whitespace
+    for (const mark of marks) {
+      expect(mark.textContent.trim()).not.toBe('')
+    }
+  })
+
   it('highlights by line range when exact text match fails across elements', async () => {
     currentHtml.value = [
       '<p data-source-line="3">Alpha text</p>',

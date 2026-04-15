@@ -1,13 +1,71 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { writeFile, readFile, mkdir, rm, mkdtemp, access } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
-import { installSkill, registerHook, saveConfig, removeAll, detectIDEs } from '../../src/setup.js'
+import {
+  installSkill, registerHook, saveConfig, removeAll, detectIDEs, registerCursorMCP,
+  registerCursorMCPOnWindowsHostFromWsl, wslPathFromWindowsUserProfile,
+  removeMdprobeFromCursorMcpData, stripMdprobeFromCursorMcpFile,
+} from '../../src/setup.js'
 
 let tmp
 
 afterEach(async () => {
   if (tmp) await rm(tmp, { recursive: true, force: true })
+})
+
+describe('wslPathFromWindowsUserProfile()', () => {
+  it('maps C:\\Users\\x to /mnt/c/Users/x', () => {
+    expect(wslPathFromWindowsUserProfile('C:\\Users\\henry')).toBe('/mnt/c/Users/henry')
+  })
+
+  it('trims trailing slashes', () => {
+    expect(wslPathFromWindowsUserProfile('C:\\Users\\henry\\')).toBe('/mnt/c/Users/henry')
+  })
+
+  it('returns null for invalid input', () => {
+    expect(wslPathFromWindowsUserProfile('')).toBeNull()
+    expect(wslPathFromWindowsUserProfile('/home/henry')).toBeNull()
+  })
+})
+
+describe('registerCursorMCPOnWindowsHostFromWsl()', () => {
+  it('writes wsl.exe bridge when WSL env and test paths are set', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'setup-cursor-win-'))
+    const mcpFile = join(tmp, '.cursor', 'mcp.json')
+    const prev = process.env.WSL_DISTRO_NAME
+    process.env.WSL_DISTRO_NAME = 'TestDistro'
+    try {
+      const result = await registerCursorMCPOnWindowsHostFromWsl({
+        _testMcpJsonWslPath: mcpFile,
+        _testWinProfile: 'C:\\Users\\henry',
+        _testMdprobeBin: '/home/henry/.npm-global/bin/mdprobe',
+      })
+      expect(result.skipped).toBe(false)
+      const data = JSON.parse(await readFile(mcpFile, 'utf-8'))
+      expect(data.mcpServers.mdprobe.command).toBe('C:\\Windows\\System32\\wsl.exe')
+      expect(data.mcpServers.mdprobe.args).toEqual([
+        '-d', 'TestDistro', '/home/henry/.npm-global/bin/mdprobe', 'mcp',
+      ])
+    } finally {
+      if (prev === undefined) delete process.env.WSL_DISTRO_NAME
+      else process.env.WSL_DISTRO_NAME = prev
+    }
+  })
+
+  it('skips when not WSL', async () => {
+    const prev = process.env.WSL_DISTRO_NAME
+    delete process.env.WSL_DISTRO_NAME
+    try {
+      const result = await registerCursorMCPOnWindowsHostFromWsl({
+        _testMcpJsonWslPath: join(tmpdir(), 'noop.json'),
+        _testWinProfile: 'C:\\Users\\x',
+      })
+      expect(result).toEqual({ skipped: true, reason: 'not_wsl' })
+    } finally {
+      if (prev !== undefined) process.env.WSL_DISTRO_NAME = prev
+    }
+  })
 })
 
 describe('detectIDEs()', () => {
@@ -59,6 +117,44 @@ describe('installSkill()', () => {
     expect(destPath).toBe(join(skillsDir, 'mdprobe', 'SKILL.md'))
     const content = await readFile(destPath, 'utf-8')
     expect(content).toBe('# Test')
+  })
+})
+
+describe('registerCursorMCP()', () => {
+  it('writes mdprobe entry when .cursor exists', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'setup-cursor-mcp-'))
+    const cursorDir = join(tmp, '.cursor')
+    await mkdir(cursorDir, { recursive: true })
+    const mcpPath = join(cursorDir, 'mcp.json')
+
+    const result = await registerCursorMCP(mcpPath)
+    expect(result.skipped).toBeUndefined()
+    expect(result.path).toBe(mcpPath)
+
+    const data = JSON.parse(await readFile(mcpPath, 'utf-8'))
+    expect(data.mcpServers.mdprobe).toEqual({ command: 'mdprobe', args: ['mcp'] })
+  })
+
+  it('merges with existing mcpServers', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'setup-cursor-mcp2-'))
+    const cursorDir = join(tmp, '.cursor')
+    await mkdir(cursorDir, { recursive: true })
+    const mcpPath = join(cursorDir, 'mcp.json')
+    await writeFile(mcpPath, JSON.stringify({
+      mcpServers: { other: { command: 'echo', args: ['hi'] } },
+    }), 'utf-8')
+
+    await registerCursorMCP(mcpPath)
+    const data = JSON.parse(await readFile(mcpPath, 'utf-8'))
+    expect(data.mcpServers.other).toBeDefined()
+    expect(data.mcpServers.mdprobe).toEqual({ command: 'mdprobe', args: ['mcp'] })
+  })
+
+  it('skips when parent config dir does not exist', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'setup-cursor-mcp3-'))
+    const mcpPath = join(tmp, 'does-not-exist-yet', 'mcp.json')
+    const result = await registerCursorMCP(mcpPath)
+    expect(result).toEqual({ skipped: true, reason: 'no_cursor_dir' })
   })
 })
 
@@ -160,6 +256,90 @@ describe('setup end-to-end (detect → install)', () => {
   })
 })
 
+describe('removeMdprobeFromCursorMcpData()', () => {
+  it('removes mdprobe and keeps another MCP server (realistic shape)', () => {
+    const before = {
+      mcpServers: {
+        mdprobe: {
+          command: 'C:\\Windows\\System32\\wsl.exe',
+          args: ['-d', 'Ubuntu-24.04', '/home/henry/.npm-global/bin/mdprobe', 'mcp'],
+        },
+        filesystem: {
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-filesystem', '/projects'],
+          env: { ALLOWED_PATHS: '/home/henry/projects' },
+        },
+      },
+    }
+    const { changed, data } = removeMdprobeFromCursorMcpData(before)
+    expect(changed).toBe(true)
+    expect(data.mcpServers.mdprobe).toBeUndefined()
+    expect(data.mcpServers.filesystem).toEqual(before.mcpServers.filesystem)
+    expect(before.mcpServers.mdprobe).toBeDefined()
+  })
+
+  it('when mdprobe was the only server, drops empty mcpServers', () => {
+    const before = {
+      mcpServers: {
+        mdprobe: { command: 'mdprobe', args: ['mcp'] },
+      },
+    }
+    const { changed, data } = removeMdprobeFromCursorMcpData(before)
+    expect(changed).toBe(true)
+    expect(data).toEqual({})
+  })
+
+  it('no-ops when mdprobe is absent', () => {
+    const before = {
+      mcpServers: {
+        notion: { url: 'https://example.com/mcp', headers: { Authorization: 'Bearer x' } },
+      },
+    }
+    const { changed, data } = removeMdprobeFromCursorMcpData(before)
+    expect(changed).toBe(false)
+    expect(data).toBe(before)
+  })
+})
+
+describe('stripMdprobeFromCursorMcpFile()', () => {
+  it('rewrites on disk and preserves non-mdprobe servers', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'setup-strip-mcp-'))
+    const mcpPath = join(tmp, 'mcp.json')
+    const fixture = {
+      mcpServers: {
+        mdprobe: { command: 'wsl', args: ['mdprobe', 'mcp'] },
+        fetch: { command: 'uvx', args: ['mcp-server-fetch'] },
+      },
+    }
+    await writeFile(mcpPath, JSON.stringify(fixture, null, 2), 'utf-8')
+
+    const r = await stripMdprobeFromCursorMcpFile(mcpPath)
+    expect(r.changed).toBe(true)
+
+    const after = JSON.parse(await readFile(mcpPath, 'utf-8'))
+    expect(after.mcpServers.fetch).toEqual(fixture.mcpServers.fetch)
+    expect(after.mcpServers.mdprobe).toBeUndefined()
+  })
+
+  it('does not write when JSON is not parseable', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'setup-strip-bad-'))
+    const mcpPath = join(tmp, 'mcp.json')
+    const garbage = '{ not json'
+    await writeFile(mcpPath, garbage, 'utf-8')
+
+    const r = await stripMdprobeFromCursorMcpFile(mcpPath)
+    expect(r).toMatchObject({ changed: false, reason: 'invalid_json' })
+    expect(await readFile(mcpPath, 'utf-8')).toBe(garbage)
+  })
+
+  it('does not write when file is missing', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'setup-strip-miss-'))
+    const mcpPath = join(tmp, 'nope.json')
+    const r = await stripMdprobeFromCursorMcpFile(mcpPath)
+    expect(r).toMatchObject({ changed: false, reason: 'read_failed' })
+  })
+})
+
 describe('removeAll()', () => {
   it('removes config file', async () => {
     tmp = await mkdtemp(join(tmpdir(), 'setup-rm-'))
@@ -193,5 +373,69 @@ describe('removeAll()', () => {
 
     const settings = JSON.parse(await readFile(settingsPath, 'utf-8'))
     expect(settings.hooks.PostToolUse).toHaveLength(0)
+  })
+
+  it('removes mdprobe from Cursor mcp.json', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'setup-rm-cursor-'))
+    const cursorDir = join(tmp, '.cursor')
+    await mkdir(cursorDir, { recursive: true })
+    const mcpPath = join(cursorDir, 'mcp.json')
+    await writeFile(mcpPath, JSON.stringify({
+      mcpServers: {
+        mdprobe: { command: 'mdprobe', args: ['mcp'] },
+        keep: { command: 'other', args: [] },
+      },
+    }), 'utf-8')
+
+    const configPath = join(tmp, '.mdprobe.json')
+    await writeFile(configPath, '{}', 'utf-8')
+
+    const prevHome = process.env.HOME
+    process.env.HOME = tmp
+    try {
+      const removed = await removeAll({ configPath, settingsPath: join(tmp, 'none.json') })
+      expect(removed).toContain('mcp:cursor')
+    } finally {
+      process.env.HOME = prevHome
+    }
+
+    const data = JSON.parse(await readFile(mcpPath, 'utf-8'))
+    expect(data.mcpServers.mdprobe).toBeUndefined()
+    expect(data.mcpServers.keep).toBeDefined()
+  })
+
+  it('removes mdprobe from Windows-host mcp path without cmd.exe (explicit opt)', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'setup-rm-win-cursor-'))
+    const winHostMcp = join(tmp, 'AppData', 'Cursor', 'User', 'globalStorage', 'mcp.json')
+    await mkdir(dirname(winHostMcp), { recursive: true })
+    await writeFile(winHostMcp, JSON.stringify({
+      mcpServers: {
+        mdprobe: {
+          command: 'C:\\Windows\\System32\\wsl.exe',
+          args: ['-d', 'Ubuntu-24.04', '/home/henry/.npm-global/bin/mdprobe', 'mcp'],
+        },
+        playwright: { command: 'npx', args: ['-y', '@playwright/mcp@latest'] },
+      },
+    }, null, 2), 'utf-8')
+
+    const configPath = join(tmp, '.mdprobe.json')
+    await writeFile(configPath, '{}', 'utf-8')
+
+    const prevHome = process.env.HOME
+    process.env.HOME = tmp
+    try {
+      const removed = await removeAll({
+        configPath,
+        settingsPath: join(tmp, 'none.json'),
+        cursorWindowsMcpPath: winHostMcp,
+      })
+
+      expect(removed).toContain('mcp:cursor_windows')
+      const data = JSON.parse(await readFile(winHostMcp, 'utf-8'))
+      expect(data.mcpServers.mdprobe).toBeUndefined()
+      expect(data.mcpServers.playwright.args).toContain('@playwright/mcp@latest')
+    } finally {
+      process.env.HOME = prevHome
+    }
   })
 })

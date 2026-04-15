@@ -32,7 +32,7 @@ npm install -g @henryavila/mdprobe
 mdprobe setup
 ```
 
-The setup wizard configures your author name, installs the AI skill to detected IDEs (Claude Code, Cursor, Gemini), registers the MCP server, and adds a PostToolUse hook.
+The setup wizard configures your author name, installs the AI skill to detected IDEs (Claude Code, Cursor, Gemini), registers the MCP server (Claude Code and Cursor when their config folders exist), and migrates legacy Claude hooks if needed.
 
 For non-interactive environments: `mdprobe setup --yes --author "Your Name"`
 
@@ -192,8 +192,8 @@ mdprobe setup
 
 Interactive wizard that:
 1. Installs the `SKILL.md` to detected IDEs (Claude Code, Cursor, Gemini)
-2. Registers the MCP server (`mdprobe mcp`) in your Claude Code config
-3. Adds a PostToolUse hook that reminds the agent to use mdprobe when editing `.md` files
+2. Registers the MCP server (`mdprobe mcp`) in Claude Code (`~/.claude.json` or `claude mcp`) and in Cursor (`~/.cursor/mcp.json` when that folder exists)
+3. Migrates legacy Claude PostToolUse hooks from older mdprobe versions (if any)
 4. Configures your author name
 
 Non-interactive: `mdprobe setup --yes --author "Your Name"`
@@ -216,9 +216,23 @@ The MCP server participates in the singleton — if a CLI-started server is alre
 
 If you prefer not to use `mdprobe setup`:
 
+**Claude Code**
+
 ```bash
 claude mcp add --scope user --transport stdio mdprobe -- mdprobe mcp
 ```
+
+**Cursor** — merge into `~/.cursor/mcp.json` (or project `.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "mdprobe": { "command": "mdprobe", "args": ["mcp"] }
+  }
+}
+```
+
+**WSL + Cursor on Windows:** Node’s home is your Linux home (e.g. `/home/you`), while the Cursor **desktop app** reads MCP from the Windows profile (`%USERPROFILE%\\.cursor\\mcp.json`). When you run `mdprobe setup` **inside WSL**, it now writes **both** `~/.cursor/mcp.json` (Linux) and, via `/mnt/c/...`, the Windows `mcp.json` with a `wsl.exe` bridge to your Linux `mdprobe` binary—so you do not need to maintain that file by hand. `WSL_DISTRO_NAME` and `cmd.exe` must be available (normal WSL2 install).
 
 ---
 

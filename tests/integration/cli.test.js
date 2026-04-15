@@ -18,6 +18,15 @@ const NODE = process.execPath
 // ---------------------------------------------------------------------------
 
 let tmpDir
+let lockFile
+
+/**
+ * Build an env object isolated from the user's running mdprobe singleton.
+ * Each test gets its own lock file so singleton detection never collides.
+ */
+function testEnv(extra = {}) {
+  return { ...process.env, NO_COLOR: '1', MDPROBE_LOCK_PATH: lockFile, ...extra }
+}
 
 /**
  * Run the CLI with given args and return { stdout, stderr, code }.
@@ -31,7 +40,7 @@ function run(args = [], { cwd, timeout = 5000, input, env } = {}) {
       {
         cwd: cwd || tmpDir,
         timeout,
-        env: env || { ...process.env, NO_COLOR: '1' },
+        env: env || testEnv(),
       },
       (error, stdout, stderr) => {
         resolve({
@@ -57,7 +66,7 @@ function spawnCli(args = [], { cwd } = {}) {
   const safeArgs = args.includes('--no-open') ? args : [...args, '--no-open']
   const proc = spawn(NODE, [CLI_PATH, ...safeArgs], {
     cwd: cwd || tmpDir,
-    env: { ...process.env, NO_COLOR: '1' },
+    env: testEnv(),
     stdio: ['pipe', 'pipe', 'pipe'],
   })
 
@@ -125,6 +134,7 @@ function httpGet(url) {
 
 beforeEach(async () => {
   tmpDir = join(tmpdir(), `mdprobe-cli-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  lockFile = join(tmpDir, 'mdprobe-test.lock')
   await mkdir(tmpDir, { recursive: true })
 })
 
@@ -705,7 +715,7 @@ describe('Config edge cases', () => {
     await mkdir(join(fakeHome, '.claude'), { recursive: true })
     const result = await run(['setup', '--yes', '--author', 'Test'], {
       cwd: tmpDir,
-      env: { ...process.env, HOME: fakeHome, NO_COLOR: '1' },
+      env: testEnv({ HOME: fakeHome }),
     })
     expect(result.code).toBe(0)
   })

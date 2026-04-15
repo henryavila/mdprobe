@@ -32,7 +32,7 @@ npm install -g @henryavila/mdprobe
 mdprobe setup
 ```
 
-O wizard de setup configura seu nome de autor, instala a skill de IA nas IDEs detectadas (Claude Code, Cursor, Gemini), registra o servidor MCP e adiciona um hook PostToolUse.
+O wizard de setup configura seu nome de autor, instala a skill de IA nas IDEs detectadas (Claude Code, Cursor, Gemini), registra o servidor MCP (Claude Code e Cursor quando as pastas de config existem) e migra hooks antigos do Claude se necessário.
 
 Para ambientes não-interativos: `mdprobe setup --yes --author "Seu Nome"`
 
@@ -192,8 +192,8 @@ mdprobe setup
 
 Wizard interativo que:
 1. Instala o `SKILL.md` nas IDEs detectadas (Claude Code, Cursor, Gemini)
-2. Registra o servidor MCP (`mdprobe mcp`) na config do Claude Code
-3. Adiciona um hook PostToolUse que lembra o agente de usar mdprobe ao editar `.md`
+2. Registra o servidor MCP (`mdprobe mcp`) no Claude Code (`~/.claude.json` ou `claude mcp`) e no Cursor (`~/.cursor/mcp.json`, se essa pasta existir)
+3. Migra hooks PostToolUse antigos do Claude de versões anteriores do mdprobe (se houver)
 4. Configura seu nome de autor
 
 Não-interativo: `mdprobe setup --yes --author "Seu Nome"`
@@ -216,9 +216,23 @@ O servidor MCP participa do singleton — se um servidor iniciado via CLI já es
 
 Se preferir não usar `mdprobe setup`:
 
+**Claude Code**
+
 ```bash
 claude mcp add --scope user --transport stdio mdprobe -- mdprobe mcp
 ```
+
+**Cursor** — mescle em `~/.cursor/mcp.json` (ou `.cursor/mcp.json` no projeto):
+
+```json
+{
+  "mcpServers": {
+    "mdprobe": { "command": "mdprobe", "args": ["mcp"] }
+  }
+}
+```
+
+**WSL + Cursor no Windows:** o `HOME` do Node no Linux é o seu home Linux (ex.: `/home/voce`), enquanto o **Cursor no Windows** lê o MCP em `%USERPROFILE%\\.cursor\\mcp.json`. Ao rodar `mdprobe setup` **no WSL**, o setup grava **os dois**: `~/.cursor/mcp.json` no Linux e, em `/mnt/c/...`, o `mcp.json` do Windows com `wsl.exe` apontando para o binário Linux do `mdprobe` — sem editar na mão. Exige `WSL_DISTRO_NAME` e `cmd.exe` (instalação WSL2 normal).
 
 ---
 

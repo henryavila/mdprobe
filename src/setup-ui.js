@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  detectIDEs, installSkill, registerMCP,
+  detectIDEs, installSkill, registerMCP, registerCursorMCP,
+  registerCursorMCPOnWindowsHostFromWsl,
   registerHook, saveConfig, removeAll,
 } from './setup.js'
 import { getConfig } from './config.js'
@@ -57,11 +58,15 @@ export async function runSetup(args) {
       await installSkill(ide)
     }
     await registerMCP()
+    const cursorMcp = await registerCursorMCP()
+    const cursorMcpWin = await registerCursorMCPOnWindowsHostFromWsl()
     await registerHook()
     await saveConfig({ author, urlStyle, telemetry: enableTelemetry })
 
     s.stop('Installed successfully')
     console.log(`  IDEs: ${ides.length > 0 ? ides.join(', ') : 'none detected'}`)
+    if (!cursorMcp.skipped) console.log(`  Cursor MCP: ${cursorMcp.path}`)
+    if (!cursorMcpWin.skipped) console.log(`  Cursor MCP (Windows): ${cursorMcpWin.winPath}`)
     console.log(`  Author: ${author}`)
     return
   }
@@ -108,6 +113,8 @@ export async function runSetup(args) {
   }
 
   const mcpResult = await registerMCP()
+  const cursorMcpResult = await registerCursorMCP()
+  const cursorMcpWinResult = await registerCursorMCPOnWindowsHostFromWsl()
   const hookResult = await registerHook()
   await saveConfig({ author, urlStyle, telemetry: enableTelemetry })
 
@@ -117,9 +124,15 @@ export async function runSetup(args) {
     console.log('\n  Skills installed:')
     installed.forEach(p => console.log(`    ${p}`))
   }
-  console.log(`\n  MCP server registered (${mcpResult.method})`)
+  console.log(`\n  MCP server registered for Claude Code (${mcpResult.method})`)
+  if (!cursorMcpResult.skipped) {
+    console.log(`  MCP server registered for Cursor (${cursorMcpResult.path})`)
+  }
+  if (!cursorMcpWinResult.skipped) {
+    console.log(`  MCP server registered for Cursor on Windows host (${cursorMcpWinResult.winPath})`)
+  }
   if (hookResult.migrated) console.log('  Old PostToolUse hook removed (no longer needed)')
   console.log(`  Config saved to ~/.mdprobe.json`)
 
-  outro('Restart Claude Code to activate.')
+  outro('Restart Claude Code and/or Cursor to activate MCP + skills.')
 }

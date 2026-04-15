@@ -1,5 +1,5 @@
 import { readFile, writeFile, mkdir, rm, access } from 'node:fs/promises'
-import { join, dirname } from 'node:path'
+import { join, dirname, win32 as pathWin32 } from 'node:path'
 import { homedir } from 'node:os'
 import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -100,6 +100,129 @@ export async function registerMCP() {
   }
 }
 
+const CURSOR_MCP_FILENAME = 'mcp.json'
+
+/**
+ * Register mdprobe MCP in Cursor (~/.cursor/mcp.json).
+ * Cursor does not read ~/.claude.json; it merges project + user mcp.json.
+ * No-op if ~/.cursor does not exist (IDE not installed or different home, e.g. WSL vs Windows).
+ * @param {string} [mcpPath] - Override path for testing
+ * @returns {Promise<{ method: 'file', path: string } | { skipped: true, reason: string }>}
+ */
+export async function registerCursorMCP(mcpPath) {
+  const resolvedPath = mcpPath || join(homedir(), '.cursor', CURSOR_MCP_FILENAME)
+  const cursorConfigDir = dirname(resolvedPath)
+  try {
+    await access(cursorConfigDir)
+  } catch {
+    tel.log('register_cursor_mcp', { skipped: true, reason: 'no_cursor_dir' })
+    return { skipped: true, reason: 'no_cursor_dir' }
+  }
+
+  let data = {}
+  try {
+    data = JSON.parse(await readFile(resolvedPath, 'utf-8'))
+  } catch {
+    /* new or invalid — start fresh object */
+  }
+
+  if (!data.mcpServers) data.mcpServers = {}
+  data.mcpServers.mdprobe = {
+    command: 'mdprobe',
+    args: ['mcp'],
+  }
+
+  await mkdir(cursorConfigDir, { recursive: true })
+  await writeFile(resolvedPath, JSON.stringify(data, null, 2), 'utf-8')
+  tel.log('register_cursor_mcp', { method: 'file', path: resolvedPath })
+  return { method: 'file', path: resolvedPath }
+}
+
+/**
+ * Convert Windows user profile path (from cmd.exe) to a WSL filesystem path under /mnt/.
+ * @param {string} winPath e.g. C:\Users\henry
+ * @returns {string | null} e.g. /mnt/c/Users/henry
+ */
+export function wslPathFromWindowsUserProfile(winPath) {
+  if (!winPath || typeof winPath !== 'string') return null
+  const trimmed = winPath.trim().replace(/[/\\]+$/, '')
+  const m = trimmed.match(/^([A-Za-z]):\\(.*)$/)
+  if (!m) return null
+  const rest = m[2].replace(/\\/g, '/')
+  return `/mnt/${m[1].toLowerCase()}/${rest}`
+}
+
+async function getWindowsUserProfileFromWsl() {
+  const out = await execFileAsync('cmd.exe', ['/c', 'echo %USERPROFILE%'])
+  return out.trim().replace(/\r/g, '')
+}
+
+async function resolveMdprobeBinaryPath() {
+  try {
+    return (await execFileAsync('which', ['mdprobe'])).trim()
+  } catch {
+    return 'mdprobe'
+  }
+}
+
+/**
+ * When setup runs inside WSL but Cursor is the Windows app, MCP must be in
+ * %USERPROFILE%\.cursor\mcp.json (reachable as /mnt/c/Users/... from WSL).
+ * Writes the wsl.exe bridge so Windows Cursor can spawn the Linux mdprobe binary.
+ * @param {object} [opts]
+ * @param {string} [opts._testMcpJsonWslPath] - override target file (tests)
+ * @param {string} [opts._testWinProfile] - override profile path (tests)
+ * @returns {Promise<{ skipped: true, reason: string } | { skipped: false, wslPath: string, winPath: string }>}
+ */
+export async function registerCursorMCPOnWindowsHostFromWsl(opts = {}) {
+  const distro = process.env.WSL_DISTRO_NAME
+  if (!distro) {
+    return { skipped: true, reason: 'not_wsl' }
+  }
+
+  let winProfile = opts._testWinProfile
+  if (!winProfile) {
+    try {
+      winProfile = await getWindowsUserProfileFromWsl()
+    } catch (err) {
+      tel.log('register_cursor_mcp_win_host', { skipped: true, reason: 'cmd_failed', error: err.message })
+      return { skipped: true, reason: 'win_profile_cmd_failed' }
+    }
+  }
+
+  if (!winProfile || winProfile.includes('%')) {
+    return { skipped: true, reason: 'win_profile_unresolved' }
+  }
+
+  const wslUserPath = wslPathFromWindowsUserProfile(winProfile)
+  if (!wslUserPath) {
+    return { skipped: true, reason: 'path_convert' }
+  }
+
+  const mcpJsonWsl = opts._testMcpJsonWslPath || join(wslUserPath, '.cursor', CURSOR_MCP_FILENAME)
+  const mdprobeBin = opts._testMdprobeBin ?? await resolveMdprobeBinaryPath()
+
+  let data = {}
+  try {
+    data = JSON.parse(await readFile(mcpJsonWsl, 'utf-8'))
+  } catch {
+    /* new or invalid */
+  }
+
+  if (!data.mcpServers) data.mcpServers = {}
+  data.mcpServers.mdprobe = {
+    command: 'C:\\Windows\\System32\\wsl.exe',
+    args: ['-d', distro, mdprobeBin, 'mcp'],
+  }
+
+  await mkdir(dirname(mcpJsonWsl), { recursive: true })
+  await writeFile(mcpJsonWsl, JSON.stringify(data, null, 2), 'utf-8')
+
+  const winPath = pathWin32.join(winProfile, '.cursor', CURSOR_MCP_FILENAME)
+  tel.log('register_cursor_mcp_win_host', { wslPath: mcpJsonWsl, winPath })
+  return { skipped: false, wslPath: mcpJsonWsl, winPath }
+}
+
 /**
  * Migrate PostToolUse hook — removes the old v0.3.0 hook that caused
  * unwanted mdprobe launches. The hook used imperative language
@@ -152,10 +275,54 @@ export async function saveConfig(config, configPath = DEFAULT_CONFIG_PATH) {
 }
 
 /**
+ * Pure transform: drop `mcpServers.mdprobe` from a parsed Cursor mcp.json object.
+ * Preserves every other server and any other top-level keys.
+ * @param {object} root
+ * @returns {{ changed: boolean, data: object }}
+ */
+export function removeMdprobeFromCursorMcpData(root) {
+  if (!root?.mcpServers?.mdprobe) {
+    return { changed: false, data: root }
+  }
+  const data = JSON.parse(JSON.stringify(root))
+  delete data.mcpServers.mdprobe
+  if (Object.keys(data.mcpServers).length === 0) {
+    delete data.mcpServers
+  }
+  return { changed: true, data }
+}
+
+/**
+ * Read a Cursor `mcp.json` path, remove mdprobe if present, rewrite when changed.
+ * @param {string} mcpPath
+ * @returns {Promise<{ changed: boolean, reason?: string }>}
+ */
+export async function stripMdprobeFromCursorMcpFile(mcpPath) {
+  let text
+  try {
+    text = await readFile(mcpPath, 'utf-8')
+  } catch {
+    return { changed: false, reason: 'read_failed' }
+  }
+  let parsed
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return { changed: false, reason: 'invalid_json' }
+  }
+  const { changed, data } = removeMdprobeFromCursorMcpData(parsed)
+  if (!changed) return { changed: false }
+  await mkdir(dirname(mcpPath), { recursive: true })
+  await writeFile(mcpPath, JSON.stringify(data, null, 2), 'utf-8')
+  return { changed: true }
+}
+
+/**
  * Remove all mdprobe installations.
  * @param {object} [opts]
  * @param {string} [opts.configPath]
  * @param {string} [opts.settingsPath]
+ * @param {string} [opts.cursorWindowsMcpPath] - Explicit Windows-host mcp.json (e.g. tests); skips cmd.exe resolution
  */
 export async function removeAll(opts = {}) {
   const configPath = opts.configPath || DEFAULT_CONFIG_PATH
@@ -199,6 +366,34 @@ export async function removeAll(opts = {}) {
       if (settings.hooks.PostToolUse.length < before) {
         await writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8')
         removed.push('hook')
+      }
+    }
+  } catch { /* ignore */ }
+
+  // Remove mdprobe from Cursor ~/.cursor/mcp.json
+  try {
+    const cursorMcpPath = join(homedir(), '.cursor', CURSOR_MCP_FILENAME)
+    const r = await stripMdprobeFromCursorMcpFile(cursorMcpPath)
+    if (r.changed) removed.push('mcp:cursor')
+  } catch { /* ignore */ }
+
+  // Windows-host mcp.json (WSL: /mnt/c/Users/...), or explicit path for tests
+  try {
+    if (opts.cursorWindowsMcpPath) {
+      const r = await stripMdprobeFromCursorMcpFile(opts.cursorWindowsMcpPath)
+      if (r.changed) removed.push('mcp:cursor_windows')
+    } else if (process.env.WSL_DISTRO_NAME) {
+      let winProfile
+      try {
+        winProfile = await getWindowsUserProfileFromWsl()
+      } catch {
+        winProfile = null
+      }
+      const wslUserPath = winProfile ? wslPathFromWindowsUserProfile(winProfile) : null
+      if (wslUserPath) {
+        const cursorMcpWinHost = join(wslUserPath, '.cursor', CURSOR_MCP_FILENAME)
+        const r = await stripMdprobeFromCursorMcpFile(cursorMcpWinHost)
+        if (r.changed) removed.push('mcp:cursor_windows')
       }
     }
   } catch { /* ignore */ }
