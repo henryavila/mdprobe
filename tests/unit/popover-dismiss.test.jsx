@@ -53,12 +53,15 @@ describe('Popover', () => {
       expect(select).toBeNull()
     })
 
-    it('auto-focuses the comment textarea', () => {
+    it('auto-focuses the comment textarea via useEffect (not autoFocus attribute)', () => {
       const { container } = render(<Popover {...defaultProps()} />)
 
       const textarea = container.querySelector('textarea')
       expect(textarea).not.toBeNull()
-      expect(textarea.hasAttribute('autofocus') || textarea === document.activeElement).toBe(true)
+      // Focus is set programmatically via useEffect, not via HTML autoFocus attribute
+      expect(document.activeElement).toBe(textarea)
+      // autoFocus attribute should NOT be present (it doesn't work for dynamic elements)
+      expect(textarea.hasAttribute('autofocus')).toBe(false)
     })
   })
 

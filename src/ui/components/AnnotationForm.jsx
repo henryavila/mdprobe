@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks'
+import { useState, useRef, useEffect } from 'preact/hooks'
 
 const TAGS = [
   { value: 'question', label: 'Question' },
@@ -11,6 +11,13 @@ export function AnnotationForm({ annotation, selectors, exact, onSave, onCancel 
   const isEdit = !!annotation
   const [comment, setComment] = useState(annotation?.comment || '')
   const [tag, setTag] = useState(annotation?.tag || 'question')
+  const textareaRef = useRef(null)
+
+  useEffect(() => {
+    // Clear text selection so keystrokes go to the textarea, not the page
+    window.getSelection()?.removeAllRanges()
+    textareaRef.current?.focus()
+  }, [])
 
   function handleSubmit(e) {
     e.preventDefault()
@@ -54,10 +61,10 @@ export function AnnotationForm({ annotation, selectors, exact, onSave, onCancel 
       </div>
 
       <textarea
+        ref={textareaRef}
         value={comment}
         onInput={e => setComment(e.target.value)}
         placeholder="Add your comment... (Ctrl+Enter to save)"
-        autoFocus
       />
 
       <div class="annotation-form__actions">

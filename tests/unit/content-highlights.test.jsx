@@ -272,4 +272,197 @@ describe('Content highlight injection', () => {
     // (not left fragmented as 3 separate text nodes: "Hello ", "world", " foo bar")
     expect(p.childNodes.length).toBe(initialNodeCount)
   })
+
+  // -------------------------------------------------------------------------
+  // BUG: whitespace normalization fallback highlights ALL text nodes instead
+  // of only the matching portion — causes annotation expansion
+  // -------------------------------------------------------------------------
+
+  it('whitespace normalization fallback only highlights matching text, not entire node range', async () => {
+    // Simulates: <li> with inline <code> elements, user selected partial text.
+    // The exact text has slightly different whitespace from DOM concatenation
+    // (e.g., browser selection collapses multiple spaces to one).
+    // The normalization fallback should wrap ONLY the matching portion.
+    const html = [
+      '<ul data-source-line="128">',
+      '<li data-source-line="128">YouTube (abre <code data-source-line="128" data-source-col="19">external_link</code> via <code data-source-line="128" data-source-col="39">window.open</code> — no mobile, abre em nova aba)</li>',
+      '</ul>',
+      '<p data-source-line="130">Lógica de disponibilidade:</p>',
+    ].join('\n')
+
+    const container = await renderWithHighlights(html, [{
+      id: 'expand1', status: 'open', tag: 'bug', comment: 'partial selection',
+      selectors: {
+        position: { startLine: 128, startColumn: 1, endLine: 128, endColumn: 50 },
+        quote: { exact: 'abre external_link via', prefix: '', suffix: '' },
+      },
+    }])
+
+    const marks = container.querySelectorAll('mark[data-highlight-id="expand1"]')
+    expect(marks.length).toBeGreaterThan(0)
+
+    // CRITICAL: the highlight must NOT expand to include "Lógica de disponibilidade"
+    const allText = [...marks].map(m => m.textContent).join('')
+    expect(allText).not.toContain('Lógica')
+    expect(allText).not.toContain('no mobile')
+    expect(allText).not.toContain('YouTube')
+    // It should only contain the selected text
+    expect(allText).toContain('abre')
+    expect(allText).toContain('external_link')
+    expect(allText).toContain('via')
+  })
+
+  it('cross-element highlight with inline code does not expand beyond exact match', async () => {
+    // Real-world scenario: list item with backtick-delimited code spans.
+    // User selects "abre external_link via" which spans:
+    //   text node "...abre " → <code>external_link</code> → text node " via ..."
+    const html = [
+      '<li data-source-line="5">Start (abre <code data-source-line="5" data-source-col="14">external_link</code> via <code data-source-line="5" data-source-col="34">window.open</code> — end text)</li>',
+    ].join('')
+
+    const container = await renderWithHighlights(html, [{
+      id: 'inline-exact', status: 'open', tag: 'question', comment: 'inline code span',
+      selectors: {
+        position: { startLine: 5, startColumn: 9, endLine: 5, endColumn: 35 },
+        quote: { exact: 'abre external_link via', prefix: '', suffix: '' },
+      },
+    }])
+
+    const marks = container.querySelectorAll('mark[data-highlight-id="inline-exact"]')
+    expect(marks.length).toBeGreaterThan(0)
+
+    const allText = [...marks].map(m => m.textContent).join('')
+    expect(allText).toBe('abre external_link via')
+    // Must NOT include surrounding text
+    expect(allText).not.toContain('Start')
+    expect(allText).not.toContain('window.open')
+    expect(allText).not.toContain('end text')
+  })
+
+  it('whitespace-normalized match wraps only overlapping portions of text nodes', async () => {
+    // When exact text has collapsed whitespace vs DOM (e.g., "foo  bar" vs "foo bar"),
+    // the normalization fallback should still only highlight the matching region
+    const html = '<p data-source-line="1">AAA BBB CCC DDD EEE</p>'
+
+    const container = await renderWithHighlights(html, [{
+      id: 'norm-partial', status: 'open', tag: 'suggestion', comment: 'normalized partial',
+      selectors: {
+        position: { startLine: 1, startColumn: 5, endLine: 1, endColumn: 12 },
+        // Exact text with double space — won't match indexOf but will match normalized
+        quote: { exact: 'BBB  CCC', prefix: '', suffix: '' },
+      },
+    }])
+
+    const marks = container.querySelectorAll('mark[data-highlight-id="norm-partial"]')
+    expect(marks.length).toBeGreaterThan(0)
+
+    const allText = [...marks].map(m => m.textContent).join('')
+    // Should contain the matched portion, not the entire paragraph
+    expect(allText).toContain('BBB')
+    expect(allText).toContain('CCC')
+    expect(allText).not.toContain('AAA')
+    expect(allText).not.toContain('EEE')
+  })
+
+  // -------------------------------------------------------------------------
+  // Deep nesting: collectTextNodes must recurse into em > code > a etc.
+  // -------------------------------------------------------------------------
+
+  it('highlights text inside deeply nested inline elements', async () => {
+    // <p> → <strong> → <em> → text: must be found by collectTextNodes
+    const html = '<p data-source-line="1">Before <strong data-source-line="1" data-source-col="8"><em>deep text</em></strong> after</p>'
+
+    const container = await renderWithHighlights(html, [{
+      id: 'deep1', status: 'open', tag: 'question', comment: 'deep nesting',
+      selectors: {
+        position: { startLine: 1, startColumn: 8, endLine: 1, endColumn: 17 },
+        quote: { exact: 'deep text', prefix: '', suffix: '' },
+      },
+    }])
+
+    const marks = container.querySelectorAll('mark[data-highlight-id="deep1"]')
+    expect(marks.length).toBeGreaterThan(0)
+
+    const allText = [...marks].map(m => m.textContent).join('')
+    expect(allText).toBe('deep text')
+  })
+
+  // -------------------------------------------------------------------------
+  // Cross-line: \n is inserted between different source lines, not between
+  // different elements on the same line
+  // -------------------------------------------------------------------------
+
+  it('inserts newline separator between different source lines in cross-element match', async () => {
+    // Two paragraphs on different lines — the concatenated text must have \n
+    const html = [
+      '<p data-source-line="3">End of first</p>',
+      '<p data-source-line="5">Start of second</p>',
+    ].join('')
+
+    const container = await renderWithHighlights(html, [{
+      id: 'cross-nl', status: 'open', tag: 'bug', comment: 'cross-line newline',
+      selectors: {
+        position: { startLine: 3, startColumn: 1, endLine: 5, endColumn: 16 },
+        // Browser selection across blocks includes \n between them
+        quote: { exact: 'End of first\nStart of second', prefix: '', suffix: '' },
+      },
+    }])
+
+    const marks = container.querySelectorAll('mark[data-highlight-id="cross-nl"]')
+    expect(marks.length).toBeGreaterThan(0)
+
+    const allText = [...marks].map(m => m.textContent).join('')
+    expect(allText).toContain('End of first')
+    expect(allText).toContain('Start of second')
+  })
+
+  it('does NOT insert newline between inline elements on the same source line', async () => {
+    // <em> and <code> on same line — no \n in concatenation, exact match should work
+    const html = '<p data-source-line="7">Text <em data-source-line="7" data-source-col="6">italic</em> and <code data-source-line="7" data-source-col="18">mono</code> end</p>'
+
+    const container = await renderWithHighlights(html, [{
+      id: 'same-line', status: 'open', tag: 'suggestion', comment: 'same line inline',
+      selectors: {
+        position: { startLine: 7, startColumn: 6, endLine: 7, endColumn: 22 },
+        quote: { exact: 'italic and mono', prefix: '', suffix: '' },
+      },
+    }])
+
+    const marks = container.querySelectorAll('mark[data-highlight-id="same-line"]')
+    expect(marks.length).toBeGreaterThan(0)
+
+    const allText = [...marks].map(m => m.textContent).join('')
+    expect(allText).toBe('italic and mono')
+    // Must NOT include surrounding text
+    expect(allText).not.toContain('Text')
+    expect(allText).not.toContain('end')
+  })
+
+  // -------------------------------------------------------------------------
+  // Line-range fallback must find text inside nested inline elements
+  // (not just direct text children of the source-line element)
+  // -------------------------------------------------------------------------
+
+  it('line-range fallback highlights text inside nested inline elements', async () => {
+    // Trigger fallback: exact text doesn't match any strategy 1 or 2 path
+    const html = '<p data-source-line="10">Plain <strong data-source-line="10" data-source-col="7"><em>bold italic</em></strong> tail</p>'
+
+    const container = await renderWithHighlights(html, [{
+      id: 'lr-nested', status: 'open', tag: 'nitpick', comment: 'line-range with nesting',
+      selectors: {
+        position: { startLine: 10, startColumn: 1, endLine: 10, endColumn: 20 },
+        // Intentionally wrong exact text to force fallback to line-range
+        quote: { exact: 'THIS WONT MATCH ANYTHING AT ALL', prefix: '', suffix: '' },
+      },
+    }])
+
+    const marks = container.querySelectorAll('mark[data-highlight-id="lr-nested"]')
+    expect(marks.length).toBeGreaterThan(0)
+
+    // Line-range fallback should wrap ALL text in the line, including nested
+    const allText = [...marks].map(m => m.textContent).join('')
+    expect(allText).toContain('Plain')
+    expect(allText).toContain('bold italic')
+    expect(allText).toContain('tail')
+  })
 })

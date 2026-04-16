@@ -215,11 +215,22 @@ export function Content({ annotationOps }) {
   // Highlight helper functions
   // ---------------------------------------------------------------------------
 
+  /** Recursively collect all text nodes from a DOM subtree. */
+  function collectTextNodes(root, result) {
+    for (const child of root.childNodes) {
+      if (child.nodeType === 3) {
+        if (child.textContent.trim() !== '') result.push(child)
+      } else if (child.nodeType === 1) {
+        collectTextNodes(child, result)
+      }
+    }
+  }
+
   /** Try to highlight exact text within a single element. Returns true on success. */
   function trySingleElementHighlight(sourceEl, exact, id, className) {
-    const walker = document.createTreeWalker(sourceEl, NodeFilter.SHOW_TEXT)
-    let node
-    while ((node = walker.nextNode())) {
+    const textNodes = []
+    collectTextNodes(sourceEl, textNodes)
+    for (const node of textNodes) {
       const idx = node.textContent.indexOf(exact)
       if (idx === -1) continue
       const range = document.createRange()
@@ -240,27 +251,20 @@ export function Content({ annotationOps }) {
 
   /**
    * Highlight text that spans multiple elements.
-   * Walk text nodes from sourceEl to endLine, concatenate, find match,
+   * Collect text nodes from sourceEl through endLine, concatenate, find match,
    * then wrap each matching portion in its own <mark>.
    */
   function tryCrossElementHighlight(contentEl, sourceEl, endLine, exact, id, className) {
-    // Collect text nodes from sourceEl through endLine (skip whitespace-only nodes
-    // that exist between block elements, e.g. \n between <ul> and <li>)
+    // Collect text nodes from source elements within the line range
     const textNodes = []
-    const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT)
-    let node
-    let collecting = false
-    while ((node = walker.nextNode())) {
-      if (!collecting && sourceEl.contains(node)) collecting = true
-      if (!collecting) continue
-      if (node.textContent.trim() === '') continue
-      textNodes.push(node)
-      // Stop after passing endLine element
-      const parent = findSourceLineParent(node, contentEl)
-      if (parent) {
-        const line = parseInt(parent.getAttribute('data-source-line'))
-        if (line > endLine) break
-      }
+    const els = contentEl.querySelectorAll('[data-source-line]')
+    for (const e of els) {
+      const line = parseInt(e.getAttribute('data-source-line'))
+      if (line < parseInt(sourceEl.getAttribute('data-source-line'))) continue
+      if (line > endLine) break
+      // Skip nested elements whose parent already covers the same line
+      if (e.parentElement?.closest(`[data-source-line="${line}"]`)) continue
+      collectTextNodes(e, textNodes)
     }
     if (textNodes.length === 0) return false
 
@@ -269,11 +273,15 @@ export function Content({ annotationOps }) {
     let concat = ''
     const nodeMap = [] // { node, startInConcat, endInConcat }
     for (let i = 0; i < textNodes.length; i++) {
-      // Add a newline between text nodes from different block parents
+      // Add a newline between text nodes from different source LINES
+      // (not different elements — inline elements like <code> within the
+      // same line have different parents but are on the same line)
       if (i > 0) {
         const prevParent = textNodes[i - 1].parentElement?.closest('[data-source-line]')
         const currParent = textNodes[i].parentElement?.closest('[data-source-line]')
-        if (prevParent !== currParent) concat += '\n'
+        const prevLine = prevParent?.getAttribute('data-source-line')
+        const currLine = currParent?.getAttribute('data-source-line')
+        if (prevLine !== currLine) concat += '\n'
       }
       const start = concat.length
       concat += textNodes[i].textContent
@@ -285,16 +293,32 @@ export function Content({ annotationOps }) {
 
     // If not found, try with whitespace normalization
     if (matchIdx === -1) {
-      const normalizedConcat = concat.replace(/\s+/g, ' ')
+      // Build a normalized nodeMap so we can compute overlaps accurately
+      let normConcat = ''
+      const normMap = []
+      for (let i = 0; i < textNodes.length; i++) {
+        if (i > 0) {
+          const prevLine = textNodes[i - 1].parentElement?.closest('[data-source-line]')?.getAttribute('data-source-line')
+          const currLine = textNodes[i].parentElement?.closest('[data-source-line]')?.getAttribute('data-source-line')
+          if (prevLine !== currLine) normConcat += ' '
+        }
+        const start = normConcat.length
+        normConcat += textNodes[i].textContent.replace(/\s+/g, ' ')
+        normMap.push({ node: textNodes[i], startInNorm: start, endInNorm: normConcat.length })
+      }
+
       const normalizedExact = exact.replace(/\s+/g, ' ')
-      const normIdx = normalizedConcat.indexOf(normalizedExact)
+      const normIdx = normConcat.indexOf(normalizedExact)
       if (normIdx === -1) return false
 
-      // Map normalized index back: highlight all nodes in range
-      // Since normalization collapses whitespace, exact mapping is unreliable.
-      // Fall back to highlighting all matching text nodes.
-      for (const nm of nodeMap) {
-        wrapTextNode(nm.node, 0, nm.node.textContent.length, id, className)
+      const normEnd = normIdx + normalizedExact.length
+      for (const nm of normMap) {
+        const overlapStart = Math.max(normIdx, nm.startInNorm)
+        const overlapEnd = Math.min(normEnd, nm.endInNorm)
+        if (overlapStart >= overlapEnd) continue
+        const nodeStart = overlapStart - nm.startInNorm
+        const nodeEnd = overlapEnd - nm.startInNorm
+        wrapTextNode(nm.node, nodeStart, nodeEnd, id, className)
       }
       return true
     }
@@ -316,7 +340,7 @@ export function Content({ annotationOps }) {
 
   /** Highlight all text nodes within elements between startLine and endLine. */
   function highlightLineRange(contentEl, startLine, endLine, id, className) {
-    // Collect text nodes FIRST, then wrap — never mutate DOM during TreeWalker iteration
+    // Collect text nodes FIRST, then wrap — never mutate DOM during iteration
     const textNodes = []
     const els = contentEl.querySelectorAll('[data-source-line]')
     for (const e of els) {
@@ -324,12 +348,7 @@ export function Content({ annotationOps }) {
       if (line < startLine || line > endLine) continue
       // Skip nested elements with same data-source-line (parent already covers them)
       if (e.parentElement?.closest(`[data-source-line="${line}"]`)) continue
-      const walker = document.createTreeWalker(e, NodeFilter.SHOW_TEXT)
-      let node
-      while ((node = walker.nextNode())) {
-        if (node.textContent.trim() === '') continue
-        textNodes.push(node)
-      }
+      collectTextNodes(e, textNodes)
     }
     for (const tn of textNodes) {
       wrapTextNode(tn, 0, tn.textContent.length, id, className)
@@ -381,7 +400,34 @@ export function Content({ annotationOps }) {
       const startLine = parseInt(startNode.getAttribute('data-source-line'))
       const startCol = parseInt(startNode.getAttribute('data-source-col') || '1')
       const endLine = endNode ? parseInt(endNode.getAttribute('data-source-line')) : startLine
-      const endCol = endNode ? parseInt(endNode.getAttribute('data-source-col') || '1') : startCol + text.length
+
+      // Calculate endColumn from the text content rather than relying on the
+      // end element's data-source-col (which is the element's START column)
+      let endCol
+      const lines = text.split('\n')
+      if (lines.length === 1) {
+        endCol = startCol + text.length
+      } else {
+        // Multi-line: end column is the length of the last line + 1
+        endCol = lines[lines.length - 1].length + 1
+      }
+
+      // Extract prefix/suffix from DOM context for disambiguation
+      let prefix = ''
+      let suffix = ''
+      try {
+        const prefixRange = document.createRange()
+        prefixRange.setStart(startNode, 0)
+        prefixRange.setEnd(range.startContainer, range.startOffset)
+        prefix = prefixRange.toString().slice(-30)
+      } catch { /* ignore range errors */ }
+      try {
+        const endEl = endNode || startNode
+        const suffixRange = document.createRange()
+        suffixRange.setStart(range.endContainer, range.endOffset)
+        suffixRange.setEnd(endEl, endEl.childNodes.length)
+        suffix = suffixRange.toString().slice(0, 30)
+      } catch { /* ignore range errors */ }
 
       setPopover({
         x: rect.left + rect.width / 2,
@@ -389,7 +435,7 @@ export function Content({ annotationOps }) {
         exact: text,
         selectors: {
           position: { startLine, startColumn: startCol, endLine, endColumn: endCol },
-          quote: { exact: text, prefix: '', suffix: '' }
+          quote: { exact: text, prefix, suffix }
         }
       })
     }
