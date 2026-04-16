@@ -5,6 +5,7 @@ import {
   annotations, anchorStatus,
   orphanedAnnotations, anchoredAnnotations,
   showResolved, filterTag, filterAuthor,
+  setAnnotations, setAnnotationsImmediate,
 } from '../../src/ui/state/store.js'
 
 describe('anchorStatus store signals', () => {
@@ -70,5 +71,55 @@ describe('anchorStatus store signals', () => {
 
     expect(orphanedAnnotations.value).toHaveLength(1)
     expect(orphanedAnnotations.value[0].id).toBe('a1')
+  })
+})
+
+describe('setAnnotations debounce', () => {
+  beforeEach(() => {
+    annotations.value = []
+  })
+
+  it('collapses rapid setAnnotations calls into one signal update', async () => {
+    let updateCount = 0
+    const dispose = annotations.subscribe(() => { updateCount++ })
+
+    // Simulate 10 rapid WS broadcasts (like 10 parallel annotation POSTs)
+    for (let i = 0; i < 10; i++) {
+      setAnnotations([{ id: `a${i}`, status: 'open', tag: 'bug', author: 'x', comment: `c${i}` }])
+    }
+
+    // Before the debounce fires, signal should NOT have changed yet
+    expect(annotations.value).toEqual([])
+    const updatesBeforeDebounce = updateCount
+
+    // Wait for debounce (50ms + margin)
+    await new Promise(r => setTimeout(r, 100))
+
+    // After debounce, signal should have the LAST value only
+    expect(annotations.value).toHaveLength(1)
+    expect(annotations.value[0].id).toBe('a9') // last call wins
+
+    // Only 1 additional signal update (not 10)
+    expect(updateCount - updatesBeforeDebounce).toBe(1)
+
+    dispose()
+  })
+
+  it('setAnnotationsImmediate bypasses debounce', () => {
+    setAnnotationsImmediate([{ id: 'imm1', status: 'open', tag: 'bug', author: 'x', comment: 'c' }])
+    expect(annotations.value).toHaveLength(1)
+    expect(annotations.value[0].id).toBe('imm1')
+  })
+
+  it('setAnnotationsImmediate cancels pending debounce', async () => {
+    setAnnotations([{ id: 'debounced', status: 'open', tag: 'bug', author: 'x', comment: 'c' }])
+    setAnnotationsImmediate([{ id: 'immediate', status: 'open', tag: 'bug', author: 'x', comment: 'c' }])
+
+    // Immediate value should win
+    expect(annotations.value[0].id).toBe('immediate')
+
+    // Wait past debounce — the old debounced value should NOT overwrite
+    await new Promise(r => setTimeout(r, 100))
+    expect(annotations.value[0].id).toBe('immediate')
   })
 })

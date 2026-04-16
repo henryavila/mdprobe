@@ -7,23 +7,50 @@ import { sections } from '../state/store.js'
 export function Content({ annotationOps }) {
   const contentRef = useRef(null)
   const [popover, setPopover] = useState(null) // { x, y, selectors }
+  const rafRef = useRef(null)
 
-  // Inject annotation highlights into DOM after HTML renders
+  // Inject annotation highlights into DOM after HTML renders.
+  // Uses requestAnimationFrame to debounce rapid signal updates — multiple
+  // annotations.value assignments (HTTP response + WS broadcast) collapse
+  // into a single DOM manipulation pass per frame.
   useEffect(() => {
     const el = contentRef.current
     if (!el) return
 
-    // Remove previous highlights
+    // Cancel any pending highlight pass from a previous signal update
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+
+    // Snapshot current values before the async rAF callback
+    const currentAnns = annotations.value
+    const currentShowResolved = showResolved.value
+    const currentSelectedId = selectedAnnotationId.value
+
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null
+      applyHighlights(el, currentAnns, currentShowResolved, currentSelectedId)
+    })
+
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
+    }
+  }, [currentHtml.value, annotations.value, showResolved.value, selectedAnnotationId.value])
+
+  function applyHighlights(el, anns, resolved, selectedId) {
+    // Remove previous highlights and normalize text nodes to prevent fragmentation
     el.querySelectorAll('mark[data-highlight-id]').forEach(mark => {
       const parent = mark.parentNode
       while (mark.firstChild) parent.insertBefore(mark.firstChild, mark)
       parent.removeChild(mark)
+      parent.normalize()
     })
 
     // Get visible annotations
-    const visibleAnns = showResolved.value
-      ? annotations.value
-      : annotations.value.filter(a => a.status === 'open')
+    const visibleAnns = resolved
+      ? anns
+      : anns.filter(a => a.status === 'open')
 
     for (const ann of visibleAnns) {
       const startLine = ann.selectors?.position?.startLine
@@ -35,7 +62,7 @@ export function Content({ annotationOps }) {
       const exact = ann.selectors?.quote?.exact
       if (!exact) continue
 
-      const markClass = `annotation-highlight tag-${ann.tag}${ann.status === 'resolved' ? ' resolved' : ''}${selectedAnnotationId.value === ann.id ? ' selected' : ''}`
+      const markClass = `annotation-highlight tag-${ann.tag}${ann.status === 'resolved' ? ' resolved' : ''}${selectedId === ann.id ? ' selected' : ''}`
 
       // Strategy 1: Try single-element exact match (fast path)
       if (trySingleElementHighlight(sourceEl, exact, ann.id, markClass)) continue
@@ -47,7 +74,7 @@ export function Content({ annotationOps }) {
       // Strategy 3: Fallback — highlight all text in line range
       highlightLineRange(el, startLine, endLine, ann.id, markClass)
     }
-  }, [currentHtml.value, annotations.value, showResolved.value, selectedAnnotationId.value])
+  }
 
   // Inject SectionApproval buttons next to h2 headings
   useEffect(() => {
@@ -289,16 +316,23 @@ export function Content({ annotationOps }) {
 
   /** Highlight all text nodes within elements between startLine and endLine. */
   function highlightLineRange(contentEl, startLine, endLine, id, className) {
+    // Collect text nodes FIRST, then wrap — never mutate DOM during TreeWalker iteration
+    const textNodes = []
     const els = contentEl.querySelectorAll('[data-source-line]')
     for (const e of els) {
       const line = parseInt(e.getAttribute('data-source-line'))
       if (line < startLine || line > endLine) continue
+      // Skip nested elements with same data-source-line (parent already covers them)
+      if (e.parentElement?.closest(`[data-source-line="${line}"]`)) continue
       const walker = document.createTreeWalker(e, NodeFilter.SHOW_TEXT)
       let node
       while ((node = walker.nextNode())) {
         if (node.textContent.trim() === '') continue
-        wrapTextNode(node, 0, node.textContent.length, id, className)
+        textNodes.push(node)
       }
+    }
+    for (const tn of textNodes) {
+      wrapTextNode(tn, 0, tn.textContent.length, id, className)
     }
   }
 

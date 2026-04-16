@@ -11,9 +11,26 @@ import { getConfig } from './config.js'
 import { hashContent } from './hash.js'
 import { discoverExistingServer, joinExistingServer, writeLockFile, computeBuildHash } from './singleton.js'
 import { createLogger } from './telemetry.js'
+import node_http from 'node:http'
 const tel = createLogger('mcp')
 
 let httpServerPromise = null
+
+/** Forward a broadcast message to a remote mdprobe server via HTTP POST. */
+function broadcastToRemote(serverUrl, msg) {
+  const body = JSON.stringify(msg)
+  const parsed = new URL(`${serverUrl}/api/broadcast`)
+  const req = node_http.request({
+    hostname: parsed.hostname,
+    port: parsed.port,
+    path: parsed.pathname,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    timeout: 3000,
+  })
+  req.on('error', () => {}) // fire-and-forget
+  req.end(body)
+}
 
 async function getOrCreateServer(port = 3000) {
   if (!httpServerPromise) {
@@ -26,7 +43,7 @@ async function getOrCreateServer(port = 3000) {
         port: existing.port,
         addFiles: (paths) => joinExistingServer(existing.url, paths),
         getFiles: () => [],
-        broadcast: () => {},
+        broadcast: (msg) => broadcastToRemote(existing.url, msg),
         close: async () => {},
         _remote: true,
       })

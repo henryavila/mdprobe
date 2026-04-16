@@ -13,6 +13,49 @@ export const frontmatter = signal(null)
 export const annotations = signal([])
 export const sections = signal([])
 export const selectedAnnotationId = signal(null)
+
+// ---------------------------------------------------------------------------
+// Debounced signal setters — collapse rapid updates into one render.
+// WebSocket messages arrive as separate macrotasks, so requestAnimationFrame
+// can fire between each one. setTimeout with a short delay guarantees that
+// all updates within the window are collapsed into a single signal write.
+// ---------------------------------------------------------------------------
+const BATCH_MS = 50
+
+let _pendingAnns = null
+let _annTimer = null
+let _pendingSecs = null
+let _secTimer = null
+
+export function setAnnotations(value) {
+  _pendingAnns = value
+  if (_annTimer != null) clearTimeout(_annTimer)
+  _annTimer = setTimeout(() => {
+    _annTimer = null
+    annotations.value = _pendingAnns
+  }, BATCH_MS)
+}
+
+export function setSections(value) {
+  _pendingSecs = value
+  if (_secTimer != null) clearTimeout(_secTimer)
+  _secTimer = setTimeout(() => {
+    _secTimer = null
+    sections.value = _pendingSecs
+  }, BATCH_MS)
+}
+
+export function setAnnotationsImmediate(value) {
+  if (_annTimer != null) { clearTimeout(_annTimer); _annTimer = null }
+  _pendingAnns = null
+  annotations.value = value
+}
+
+export function setSectionsImmediate(value) {
+  if (_secTimer != null) { clearTimeout(_secTimer); _secTimer = null }
+  _pendingSecs = null
+  sections.value = value
+}
 export const showResolved = signal(false)
 export const filterTag = signal(null)
 export const filterAuthor = signal(null)

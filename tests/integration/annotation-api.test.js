@@ -358,4 +358,42 @@ describe('GET /api/export', () => {
     expect(res.status).toBe(200)
     expect(res.body.toLowerCase()).toMatch(/no annotations/i)
   })
+
+  // ---------------------------------------------------------------------------
+  // POST /api/broadcast — forward WebSocket broadcasts from remote MCP
+  // ---------------------------------------------------------------------------
+
+  it('POST /api/broadcast forwards message to WebSocket clients', async () => {
+    await writeFixture('broadcast-test.md', '# Broadcast\n\nHello')
+    const s = track(await createServer({ files: [node_path.join(tmpDir, 'broadcast-test.md')], port: 0, open: false }))
+
+    // Connect a WebSocket client
+    const { WebSocket } = await import('ws')
+    const ws = new WebSocket(`ws://127.0.0.1:${s.port}/ws`)
+    const messages = []
+    await new Promise((resolve, reject) => {
+      ws.on('open', resolve)
+      ws.on('error', reject)
+      setTimeout(() => reject(new Error('WS connect timeout')), 3000)
+    })
+    ws.on('message', data => messages.push(JSON.parse(data.toString())))
+
+    // POST a broadcast message (simulating remote MCP proxy)
+    const broadcastRes = await httpRequest(`${s.url}/api/broadcast`, 'POST', {
+      type: 'annotations',
+      file: 'broadcast-test.md',
+      annotations: [{ id: 'bcast1', status: 'open', tag: 'bug', comment: 'from remote' }],
+      sections: [],
+    })
+
+    expect(broadcastRes.status).toBe(200)
+
+    // Give WebSocket time to receive
+    await new Promise(r => setTimeout(r, 100))
+    ws.close()
+
+    const annMsg = messages.find(m => m.type === 'annotations')
+    expect(annMsg).toBeDefined()
+    expect(annMsg.annotations[0].id).toBe('bcast1')
+  })
 })

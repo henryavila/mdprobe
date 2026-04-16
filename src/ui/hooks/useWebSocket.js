@@ -4,8 +4,8 @@ import {
   currentToc,
   currentFile,
   files,
-  annotations,
-  sections,
+  setAnnotations,
+  setSections,
   driftWarning,
   anchorStatus,
 } from '../state/store.js'
@@ -86,10 +86,11 @@ export function useWebSocket() {
           break
 
         case 'annotations':
-          // Only apply if the broadcast is for the currently viewed file
+          // Only apply if the broadcast is for the currently viewed file.
+          // Uses debounced setters to collapse rapid broadcasts into one render.
           if (!msg.file || msg.file === currentFile.value) {
-            annotations.value = msg.annotations || []
-            sections.value = msg.sections || []
+            setAnnotations(msg.annotations || [])
+            setSections(msg.sections || [])
           }
           break
 

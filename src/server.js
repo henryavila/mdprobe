@@ -815,6 +815,16 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
         })
       }
 
+      // POST /api/broadcast — forward a WebSocket broadcast from a remote MCP process
+      if (req.method === 'POST' && pathname === '/api/broadcast') {
+        const body = await readBody(req)
+        if (!body || !body.type) {
+          return sendJSON(res, 400, { error: 'Missing message type' })
+        }
+        broadcast(body)
+        return sendJSON(res, 200, { ok: true })
+      }
+
       // DELETE /api/remove-file — remove a file from the server
       if (req.method === 'DELETE' && pathname === '/api/remove-file') {
         const body = await readBody(req)
@@ -835,12 +845,9 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
         })
       }
 
-      // GET /api/review/status (only in once mode)
+      // GET /api/review/status
       if (req.method === 'GET' && pathname === '/api/review/status') {
-        if (once) {
-          return sendJSON(res, 200, { mode: 'once' })
-        }
-        return send404(res)
+        return sendJSON(res, 200, { mode: once ? 'once' : null })
       }
 
       // POST /api/review/finish — signal that review is complete (--once mode)

@@ -1,4 +1,5 @@
-import { annotations, sections, currentFile, author, driftWarning, sectionLevel, anchorStatus } from '../state/store.js'
+import { annotations, sections, currentFile, author, driftWarning, sectionLevel, anchorStatus,
+  setAnnotations, setAnnotationsImmediate, setSectionsImmediate } from '../state/store.js'
 
 const API_BASE = '' // same origin
 
@@ -21,8 +22,8 @@ export function useAnnotations() {
     )
     if (!res.ok) throw new Error(`Failed to fetch annotations: ${res.status}`)
     const data = await res.json()
-    annotations.value = data.annotations || []
-    sections.value = data.sections || []
+    setAnnotationsImmediate(data.annotations || [])
+    setSectionsImmediate(data.sections || [])
     if (data.sectionLevel != null) sectionLevel.value = data.sectionLevel
     driftWarning.value = data.drift || false
     if (data.drift && typeof data.drift === 'object') {
@@ -41,32 +42,33 @@ export function useAnnotations() {
       tag,
       author: author.value,
     })
-    annotations.value = data.annotations || annotations.value
+    // Only update if WS broadcast hasn't already delivered the same data
+    if (data.annotations) setAnnotations(data.annotations)
     return data
   }
 
   /** Mark an annotation as resolved. */
   async function resolveAnnotation(id) {
     const data = await postAnnotation('resolve', { id })
-    annotations.value = data.annotations || annotations.value
+    if (data.annotations) setAnnotations(data.annotations)
   }
 
   /** Re-open a previously resolved annotation. */
   async function reopenAnnotation(id) {
     const data = await postAnnotation('reopen', { id })
-    annotations.value = data.annotations || annotations.value
+    if (data.annotations) setAnnotations(data.annotations)
   }
 
   /** Update the comment and/or tag of an existing annotation. */
   async function updateAnnotation(id, { comment, tag }) {
     const data = await postAnnotation('update', { id, comment, tag })
-    annotations.value = data.annotations || annotations.value
+    if (data.annotations) setAnnotations(data.annotations)
   }
 
   /** Delete an annotation by id. */
   async function deleteAnnotation(id) {
     const data = await postAnnotation('delete', { id })
-    annotations.value = data.annotations || annotations.value
+    if (data.annotations) setAnnotations(data.annotations)
   }
 
   /** Add a threaded reply to an annotation. */
@@ -76,7 +78,7 @@ export function useAnnotations() {
       author: author.value,
       comment,
     })
-    annotations.value = data.annotations || annotations.value
+    if (data.annotations) setAnnotations(data.annotations)
   }
 
   // ---------------------------------------------------------------------------
@@ -86,34 +88,34 @@ export function useAnnotations() {
   /** Approve a single section by heading text (cascades to children). */
   async function approveSection(heading) {
     const data = await postSection('approve', { heading })
-    sections.value = data.sections || sections.value
+    if (data.sections) setSectionsImmediate(data.sections)
     if (data.sectionLevel != null) sectionLevel.value = data.sectionLevel
   }
 
   /** Reject a single section by heading text (no cascade). */
   async function rejectSection(heading) {
     const data = await postSection('reject', { heading })
-    sections.value = data.sections || sections.value
+    if (data.sections) setSectionsImmediate(data.sections)
     if (data.sectionLevel != null) sectionLevel.value = data.sectionLevel
   }
 
   /** Approve all sections in the current file at once. */
   async function approveAllSections() {
     const data = await postSection('approveAll')
-    sections.value = data.sections || sections.value
+    if (data.sections) setSectionsImmediate(data.sections)
   }
 
   /** Reset a single section to pending. */
   async function resetSection(heading) {
     const data = await postSection('reset', { heading })
-    sections.value = data.sections || sections.value
+    if (data.sections) setSectionsImmediate(data.sections)
     if (data.sectionLevel != null) sectionLevel.value = data.sectionLevel
   }
 
   /** Reset all section review statuses in the current file. */
   async function clearAllSections() {
     const data = await postSection('clearAll')
-    sections.value = data.sections || sections.value
+    if (data.sections) setSectionsImmediate(data.sections)
   }
 
   // ---------------------------------------------------------------------------
