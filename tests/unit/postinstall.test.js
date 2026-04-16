@@ -2,12 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-const { writeFileSync } = vi.hoisted(() => ({
-  writeFileSync: vi.fn()
-}))
+const { writeFileSync, actualReadFileSync } = vi.hoisted(() => {
+  const { readFileSync } = require('node:fs')
+  return { writeFileSync: vi.fn(), actualReadFileSync: readFileSync }
+})
 
 vi.mock('node:fs', () => ({
-  writeFileSync
+  writeFileSync,
+  readFileSync: actualReadFileSync,
 }))
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -46,7 +48,7 @@ describe('postinstall script', () => {
 
     expect(writeFileSync).toHaveBeenCalledTimes(1)
     expect(writeFileSync.mock.calls[0][0]).toBe('/dev/tty')
-    expect(writeFileSync.mock.calls[0][1]).toContain('installed successfully!')
+    expect(writeFileSync.mock.calls[0][1]).toContain('installed successfully')
     expect(writeFileSync.mock.calls[0][1]).toContain('mdprobe setup')
     expect(result.stdout).toBe('')
   })

@@ -1,8 +1,13 @@
 #!/usr/bin/env node
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'))
 
 const message = `
-  \x1b[1mmdProbe\x1b[0m installed successfully!
+  \x1b[32m✔\x1b[0m \x1b[1mmdProbe v${pkg.version}\x1b[0m installed successfully
 
   \x1b[36mUsage:\x1b[0m
     mdprobe doc.md              Open a single file
