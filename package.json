@@ -1,6 +1,6 @@
 {
   "name": "@henryavila/mdprobe",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Markdown viewer + reviewer for terminal/WSL with live reload, persistent annotations, and AI agent integration",
   "type": "module",
   "bin": {
@@ -27,6 +27,7 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
     "build:ui": "vite build",
     "dev:ui": "vite dev",
     "postinstall": "node scripts/postinstall.js"
@@ -50,6 +51,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@preact/preset-vite": "^2.9.0",
     "@preact/signals": "^2.0.0",
     "@testing-library/preact": "^3.1.0",
