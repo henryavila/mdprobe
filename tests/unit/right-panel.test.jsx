@@ -4,6 +4,7 @@ import { RightPanel } from '../../src/ui/components/RightPanel.jsx'
 import {
   rightPanelOpen, annotations, selectedAnnotationId,
   showResolved, filterTag, filterAuthor, anchorStatus, driftWarning,
+  modalAnnotationId, modalOpenMode, closeAnnotationModal,
 } from '../../src/ui/state/store.js'
 
 // ---------------------------------------------------------------------------
@@ -143,7 +144,7 @@ describe('RightPanel', () => {
       expect(selectedAnnotationId.value).toBe('a1')
     })
 
-    it('selected card shows Resolve, Edit, Delete buttons', () => {
+    it('selected card shows Resolve, Edit, Reply, Delete buttons', () => {
       selectedAnnotationId.value = 'a1'
       const { container } = render(<RightPanel annotationOps={mockOps} />)
 
@@ -154,6 +155,7 @@ describe('RightPanel', () => {
       const labels = [...buttons].map(b => b.textContent.trim())
       expect(labels).toContain('Resolve')
       expect(labels).toContain('Edit')
+      expect(labels).toContain('Reply')
       expect(labels).toContain('Delete')
     })
 
@@ -180,13 +182,6 @@ describe('RightPanel', () => {
       expect(labels).not.toContain('Resolve')
     })
 
-    it('selected card shows reply input', () => {
-      selectedAnnotationId.value = 'a1'
-      const { container } = render(<RightPanel annotationOps={mockOps} />)
-
-      const replyInput = container.querySelector('.reply-input input')
-      expect(replyInput).not.toBeNull()
-    })
   })
 
   // -------------------------------------------------------------------------
@@ -279,6 +274,60 @@ describe('RightPanel', () => {
       fireEvent.click(closeBtn)
 
       expect(rightPanelOpen.value).toBe(false)
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // Card action buttons route through modal signals
+  // -------------------------------------------------------------------------
+
+  describe('Card action buttons route through modal signals', () => {
+    beforeEach(() => {
+      closeAnnotationModal()
+      annotations.value = [
+        {
+          id: 'ann-1', status: 'open', tag: 'question', author: 'me',
+          comment: 'c',
+          selectors: { quote: { exact: 'q' }, position: { startLine: 1 } },
+          replies: [],
+        },
+      ]
+      anchorStatus.value = { 'ann-1': 'anchored' }
+      selectedAnnotationId.value = 'ann-1'
+    })
+
+    it('clicking Edit sets modalAnnotationId and modalOpenMode="edit"', () => {
+      const { container } = render(<RightPanel annotationOps={mockOps} />)
+
+      const editBtn = [...container.querySelectorAll('button.btn-sm')]
+        .find(b => b.textContent.trim() === 'Edit')
+      fireEvent.click(editBtn)
+
+      expect(modalAnnotationId.value).toBe('ann-1')
+      expect(modalOpenMode.value).toBe('edit')
+    })
+
+    it('clicking Reply sets modalAnnotationId and modalOpenMode="reply"', () => {
+      const { container } = render(<RightPanel annotationOps={mockOps} />)
+
+      const replyBtn = [...container.querySelectorAll('button.btn-sm')]
+        .find(b => b.textContent.trim() === 'Reply')
+      fireEvent.click(replyBtn)
+
+      expect(modalAnnotationId.value).toBe('ann-1')
+      expect(modalOpenMode.value).toBe('reply')
+    })
+
+    it('no inline annotation-form inside selected card', () => {
+      const { container } = render(<RightPanel annotationOps={mockOps} />)
+
+      expect(container.querySelector('.annotation-card .annotation-form')).toBeNull()
+    })
+
+    it('no inline reply-input inside selected card', () => {
+      const { container } = render(<RightPanel annotationOps={mockOps} />)
+
+      expect(container.querySelector('.annotation-card .reply-input')).toBeNull()
     })
   })
 })

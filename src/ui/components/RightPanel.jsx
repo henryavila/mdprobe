@@ -1,13 +1,10 @@
 import { useState } from 'preact/hooks'
 import { rightPanelOpen, filteredAnnotations, selectedAnnotationId, showResolved,
          filterTag, filterAuthor, uniqueTags, uniqueAuthors, openAnnotations,
-         anchoredAnnotations, orphanedAnnotations, driftWarning } from '../state/store.js'
-import { AnnotationForm } from './AnnotationForm.jsx'
-import { ReplyThread } from './ReplyThread.jsx'
+         anchoredAnnotations, orphanedAnnotations, driftWarning, openAnnotationModal } from '../state/store.js'
 
 export function RightPanel({ annotationOps }) {
   const isCollapsed = !rightPanelOpen.value
-  const [editingId, setEditingId] = useState(null)
 
   function handleAnnotationClick(ann) {
     selectedAnnotationId.value = ann.id
@@ -83,8 +80,6 @@ export function RightPanel({ annotationOps }) {
                       isSelected={selectedAnnotationId.value === ann.id}
                       onClick={() => handleAnnotationClick(ann)}
                       annotationOps={annotationOps}
-                      editingId={editingId}
-                      setEditingId={setEditingId}
                     />
                   ))
                 )}
@@ -95,8 +90,6 @@ export function RightPanel({ annotationOps }) {
                     selectedAnnotationId={selectedAnnotationId.value}
                     onSelect={(ann) => { selectedAnnotationId.value = ann.id }}
                     annotationOps={annotationOps}
-                    editingId={editingId}
-                    setEditingId={setEditingId}
                   />
                 )}
               </>
@@ -108,30 +101,31 @@ export function RightPanel({ annotationOps }) {
   )
 }
 
-function AnnotationCard({ ann, isSelected, onClick, annotationOps, editingId, setEditingId, orphaned = false }) {
+function AnnotationCard({ ann, isSelected, onClick, annotationOps, orphaned = false }) {
   return (
     <div
       data-annotation-id={ann.id}
       class={`annotation-card ${isSelected ? 'selected' : ''} ${ann.status === 'resolved' ? 'resolved' : ''} ${orphaned ? 'orphaned' : ''}`}
       onClick={onClick}
     >
-      {/* Tag + Author + Status */}
       <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px">
         <span class={`tag tag-${ann.tag}`}>{ann.tag}</span>
         <span style="font-size: 11px; color: var(--text-muted)">{ann.author}</span>
         {ann.status === 'resolved' && <span style="font-size: 10px; color: var(--status-approved)">✓ resolved</span>}
         {orphaned && <span style="font-size: 10px; color: var(--tag-bug)">not found</span>}
+        {ann.replies?.length > 0 && (
+          <span style="font-size: 10px; color: var(--text-muted); margin-left: auto">
+            {ann.replies.length} {ann.replies.length === 1 ? 'reply' : 'replies'}
+          </span>
+        )}
       </div>
 
-      {/* Quote */}
       {ann.selectors?.quote?.exact && (
         <div class="quote">{ann.selectors.quote.exact}</div>
       )}
 
-      {/* Comment */}
       <div style="font-size: 13px; margin-top: 4px">{ann.comment}</div>
 
-      {/* Actions (when selected) */}
       {isSelected && (
         <div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap">
           {ann.status === 'open' ? (
@@ -143,8 +137,11 @@ function AnnotationCard({ ann, isSelected, onClick, annotationOps, editingId, se
               Reopen
             </button>
           )}
-          <button class="btn btn-sm" onClick={(e) => { e.stopPropagation(); setEditingId(ann.id) }}>
+          <button class="btn btn-sm" onClick={(e) => { e.stopPropagation(); openAnnotationModal(ann.id, 'edit') }}>
             Edit
+          </button>
+          <button class="btn btn-sm" onClick={(e) => { e.stopPropagation(); openAnnotationModal(ann.id, 'reply') }}>
+            Reply
           </button>
           <button class="btn btn-sm btn-danger" onClick={(e) => {
             e.stopPropagation()
@@ -154,34 +151,11 @@ function AnnotationCard({ ann, isSelected, onClick, annotationOps, editingId, se
           </button>
         </div>
       )}
-
-      {/* Edit form */}
-      {editingId === ann.id && (
-        <AnnotationForm
-          mode="edit"
-          annotation={ann}
-          onSave={(data) => {
-            annotationOps.updateAnnotation(ann.id, data)
-            setEditingId(null)
-          }}
-          onCancel={() => setEditingId(null)}
-        />
-      )}
-
-      {/* Replies */}
-      {ann.replies?.length > 0 && (
-        <ReplyThread replies={ann.replies} />
-      )}
-
-      {/* Reply input (when selected) */}
-      {isSelected && (
-        <ReplyInput annotationId={ann.id} onReply={annotationOps.addReply} />
-      )}
     </div>
   )
 }
 
-function OrphanedSection({ annotations, selectedAnnotationId, onSelect, annotationOps, editingId, setEditingId }) {
+function OrphanedSection({ annotations, selectedAnnotationId, onSelect, annotationOps }) {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
@@ -197,8 +171,6 @@ function OrphanedSection({ annotations, selectedAnnotationId, onSelect, annotati
           isSelected={selectedAnnotationId === ann.id}
           onClick={() => onSelect(ann)}
           annotationOps={annotationOps}
-          editingId={editingId}
-          setEditingId={setEditingId}
           orphaned
         />
       ))}
@@ -206,26 +178,3 @@ function OrphanedSection({ annotations, selectedAnnotationId, onSelect, annotati
   )
 }
 
-function ReplyInput({ annotationId, onReply }) {
-  const [text, setText] = useState('')
-
-  function handleSubmit(e) {
-    e.preventDefault()
-    if (text.trim()) {
-      onReply(annotationId, text.trim())
-      setText('')
-    }
-  }
-
-  return (
-    <form class="reply-input" onSubmit={handleSubmit} onClick={e => e.stopPropagation()}>
-      <input
-        type="text"
-        value={text}
-        onInput={e => setText(e.target.value)}
-        placeholder="Reply..."
-      />
-      <button type="submit" class="btn btn-sm btn-primary" disabled={!text.trim()}>Reply</button>
-    </form>
-  )
-}

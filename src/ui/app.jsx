@@ -13,6 +13,7 @@ import { RightPanel } from './components/RightPanel.jsx'
 import { Content } from './components/Content.jsx'
 import { ThemePicker } from './components/ThemePicker.jsx'
 import { ExportMenu } from './components/ExportMenu.jsx'
+import { AnnotationModal } from './components/AnnotationModal.jsx'
 import './styles/themes.css'
 
 function App() {
@@ -139,6 +140,9 @@ function App() {
 
       {/* Right Panel */}
       <RightPanel annotationOps={annotationOps} />
+
+      {/* Annotation Modal */}
+      <AnnotationModal annotationOps={annotationOps} />
 
       {/* Status Bar */}
       <footer class="status-bar">
