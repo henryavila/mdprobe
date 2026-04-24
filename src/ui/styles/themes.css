@@ -333,9 +333,11 @@ body {
   opacity: 0.3;
 }
 
-.annotation-highlight.selected {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+.content-area[data-selected] mark[data-highlight-id] { filter: saturate(0.55); }
+.content-area[data-selected] mark.is-selected {
+  filter: none;
+  box-shadow: 0 0 0 2px var(--accent);
+  border-radius: 2px;
 }
 
 /* --------------------------------------------------------------------------
