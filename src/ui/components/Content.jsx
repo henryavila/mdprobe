@@ -17,8 +17,10 @@ export function Content({ annotationOps }) {
     const el = contentRef.current
     if (!el) return
     const h = highlighterRef.current
+    let raf2 = 0
     const raf1 = requestAnimationFrame(() => {
-      const raf2 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        if (!el.isConnected) return
         h.sync(el, annotations.value, {
           showResolved: showResolved.value,
           prevAnnotations: prevAnnsRef.current,
@@ -27,9 +29,11 @@ export function Content({ annotationOps }) {
         prevAnnsRef.current = annotations.value
         h.setSelection(el, selectedAnnotationId.value)
       })
-      return () => cancelAnimationFrame(raf2)
     })
-    return () => cancelAnimationFrame(raf1)
+    return () => {
+      cancelAnimationFrame(raf1)
+      if (raf2) cancelAnimationFrame(raf2)
+    }
   }, [annotations.value, showResolved.value])
 
   // (B) HTML changed — wipe prev snapshot so next sync rebuilds from scratch
