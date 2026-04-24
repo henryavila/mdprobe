@@ -84,6 +84,7 @@ export function Popover({ x, y, exact, selectors, onSave, onCancel }) {
         </button>
       </div>
       <AnnotationForm
+        mode="create"
         exact={exact}
         selectors={selectors}
         onSave={onSave}

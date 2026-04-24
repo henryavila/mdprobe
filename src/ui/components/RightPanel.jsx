@@ -158,6 +158,7 @@ function AnnotationCard({ ann, isSelected, onClick, annotationOps, editingId, se
       {/* Edit form */}
       {editingId === ann.id && (
         <AnnotationForm
+          mode="edit"
           annotation={ann}
           onSave={(data) => {
             annotationOps.updateAnnotation(ann.id, data)
