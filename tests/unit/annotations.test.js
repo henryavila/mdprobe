@@ -337,6 +337,73 @@ describe('addReply()', () => {
 })
 
 // ---------------------------------------------------------------------------
+// reply id assignment
+// ---------------------------------------------------------------------------
+describe('reply id assignment', () => {
+  let file, id
+
+  beforeEach(() => {
+    file = AnnotationFile.create('spec.md', 'sha256:abc')
+    file.add({
+      selectors: { position: { startLine: 1 } },
+      comment: 'question',
+      tag: 'question',
+      author: 'Alice',
+    })
+    id = file.annotations[0].id
+  })
+
+  it('addReply assigns a uuid id', () => {
+    file.addReply(id, { author: 'Bob', comment: 'first' })
+
+    const ann = file.getById(id)
+    expect(ann.replies).toHaveLength(1)
+
+    const reply = ann.replies[0]
+    expect(reply.id).toBeDefined()
+    expect(typeof reply.id).toBe('string')
+    expect(reply.id).toMatch(/^[0-9a-f-]{36}$/)
+  })
+
+  it('loading replies without id backfills them', async () => {
+    // Create a temp file with a reply that has no id
+    const yamlContent = `version: 1
+source: test.md
+source_hash: sha256:test
+annotations:
+  - id: root-1
+    selectors:
+      position: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 3 }
+      quote: { exact: 'hi', prefix: '', suffix: '' }
+    comment: x
+    tag: question
+    author: me
+    status: open
+    created_at: 2026-01-01T00:00:00Z
+    updated_at: 2026-01-01T00:00:00Z
+    replies:
+      - author: other
+        comment: legacy
+        created_at: 2026-01-01T00:00:00Z
+`
+
+    // Write to a temp file
+    const tmpPath = node_path.join(tmpDir, 'legacy.annotations.yaml')
+    await node_fs.writeFile(tmpPath, yamlContent, 'utf-8')
+
+    // Load the file
+    const loadedFile = await AnnotationFile.load(tmpPath)
+
+    // Assert the reply has a backfilled id
+    const ann = loadedFile.getById('root-1')
+    expect(ann.replies).toHaveLength(1)
+    expect(ann.replies[0].id).toBeDefined()
+    expect(typeof ann.replies[0].id).toBe('string')
+    expect(ann.replies[0].id).toMatch(/^[0-9a-f-]{36}$/)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Section approval
 // ---------------------------------------------------------------------------
 describe('Section approval', () => {

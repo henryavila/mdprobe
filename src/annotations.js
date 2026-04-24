@@ -45,10 +45,13 @@ export class AnnotationFile {
     this.annotations = data.annotations ?? []
     this.sections = data.sections ?? []
 
-    // Ensure every annotation has a replies array
+    // Ensure every annotation has a replies array and backfill missing reply ids
     for (const ann of this.annotations) {
       if (!ann.replies) {
         ann.replies = []
+      }
+      for (const reply of ann.replies) {
+        if (!reply.id) reply.id = randomUUID()
       }
     }
   }
@@ -215,6 +218,7 @@ export class AnnotationFile {
   addReply(annotationId, { author, comment }) {
     const ann = this._findOrThrow(annotationId)
     ann.replies.push({
+      id: randomUUID(),
       author,
       comment,
       created_at: new Date().toISOString(),
