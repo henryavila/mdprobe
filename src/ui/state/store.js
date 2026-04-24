@@ -126,3 +126,17 @@ export const sectionStats = computed(() => {
   const reviewed = atLevel.filter(s => s.status !== 'pending').length
   return { total, reviewed }
 })
+
+// Modal state — used by AnnotationModal and RightPanel
+export const modalAnnotationId = signal(null)
+export const modalOpenMode = signal(null) // 'edit' | 'reply' | null
+
+export function openAnnotationModal(id, mode) {
+  modalAnnotationId.value = id
+  modalOpenMode.value = mode
+}
+
+export function closeAnnotationModal() {
+  modalAnnotationId.value = null
+  modalOpenMode.value = null
+}
