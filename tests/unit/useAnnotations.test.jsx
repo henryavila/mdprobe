@@ -207,6 +207,37 @@ describe('useAnnotations', () => {
   })
 
   // -------------------------------------------------------------------------
+  // editReply / deleteReply
+  // -------------------------------------------------------------------------
+
+  describe('editReply', () => {
+    it('sends editReply action with annotation id, reply id, and comment', async () => {
+      globalThis.fetch = mockFetch({ annotations: [] })
+
+      await ops.editReply('ann-1', 'reply-2', 'updated comment')
+
+      const body = JSON.parse(globalThis.fetch.mock.calls[0][1].body)
+      expect(body.action).toBe('editReply')
+      expect(body.data.id).toBe('ann-1')
+      expect(body.data.replyId).toBe('reply-2')
+      expect(body.data.comment).toBe('updated comment')
+    })
+  })
+
+  describe('deleteReply', () => {
+    it('sends deleteReply action with annotation id and reply id', async () => {
+      globalThis.fetch = mockFetch({ annotations: [] })
+
+      await ops.deleteReply('ann-1', 'reply-2')
+
+      const body = JSON.parse(globalThis.fetch.mock.calls[0][1].body)
+      expect(body.action).toBe('deleteReply')
+      expect(body.data.id).toBe('ann-1')
+      expect(body.data.replyId).toBe('reply-2')
+    })
+  })
+
+  // -------------------------------------------------------------------------
   // Section operations
   // -------------------------------------------------------------------------
 

@@ -81,6 +81,25 @@ export function useAnnotations() {
     if (data.annotations) setAnnotations(data.annotations)
   }
 
+  /** Edit an existing reply on an annotation. */
+  async function editReply(annotationId, replyId, comment) {
+    const data = await postAnnotation('editReply', {
+      id: annotationId,
+      replyId,
+      comment,
+    })
+    if (data.annotations) setAnnotations(data.annotations)
+  }
+
+  /** Delete a reply from an annotation. */
+  async function deleteReply(annotationId, replyId) {
+    const data = await postAnnotation('deleteReply', {
+      id: annotationId,
+      replyId,
+    })
+    if (data.annotations) setAnnotations(data.annotations)
+  }
+
   // ---------------------------------------------------------------------------
   // Sections
   // ---------------------------------------------------------------------------
@@ -158,6 +177,8 @@ export function useAnnotations() {
     updateAnnotation,
     deleteAnnotation,
     addReply,
+    editReply,
+    deleteReply,
     approveSection,
     rejectSection,
     resetSection,
