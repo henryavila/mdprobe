@@ -666,6 +666,12 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
           case 'reply':
             af.addReply(data.id, { author: data.author, comment: data.comment })
             break
+          case 'editReply':
+            af.editReply(data.id, data.replyId, data.comment)
+            break
+          case 'deleteReply':
+            af.deleteReply(data.id, data.replyId)
+            break
           default:
             return sendJSON(res, 400, { error: `Unknown action: ${action}` })
         }

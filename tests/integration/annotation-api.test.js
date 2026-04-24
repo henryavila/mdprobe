@@ -363,6 +363,98 @@ describe('GET /api/export', () => {
   // POST /api/broadcast — forward WebSocket broadcasts from remote MCP
   // ---------------------------------------------------------------------------
 
+  // ---------------------------------------------------------------------------
+  // editReply / deleteReply HTTP actions
+  // ---------------------------------------------------------------------------
+
+  describe('editReply / deleteReply HTTP actions', () => {
+    let baseUrl
+
+    beforeEach(async () => {
+      await writeFixture('replies.md', '# Doc\n\n## Section\n\n- Item one\n')
+      const s = track(await createServer({ files: [node_path.join(tmpDir, 'replies.md')], port: 0, open: false }))
+      baseUrl = s.url
+    })
+
+    it('edits a reply comment by id', async () => {
+      // 1. Create annotation
+      const addRes = await httpRequest(`${baseUrl}/api/annotations`, 'POST', {
+        file: 'replies.md',
+        action: 'add',
+        data: {
+          selectors: {
+            position: { startLine: 5, startColumn: 3, endLine: 5, endColumn: 11 },
+            quote: { exact: 'Item one', prefix: '- ', suffix: '\n' },
+          },
+          comment: 'Review this',
+          tag: 'question',
+          author: 'Alice',
+        },
+      })
+      expect(addRes.status).toBe(200)
+      const annId = addRes.json().annotations[0].id
+
+      // 2. Add a reply
+      const replyRes = await httpRequest(`${baseUrl}/api/annotations`, 'POST', {
+        file: 'replies.md',
+        action: 'reply',
+        data: { id: annId, author: 'Bob', comment: 'first' },
+      })
+      expect(replyRes.status).toBe(200)
+      const replyId = replyRes.json().annotations.find(a => a.id === annId).replies[0].id
+
+      // 3. Edit the reply
+      const editRes = await httpRequest(`${baseUrl}/api/annotations`, 'POST', {
+        file: 'replies.md',
+        action: 'editReply',
+        data: { id: annId, replyId, comment: 'edited' },
+      })
+
+      expect(editRes.status).toBe(200)
+      const ann = editRes.json().annotations.find(a => a.id === annId)
+      expect(ann.replies[0].comment).toBe('edited')
+    })
+
+    it('deletes a reply by id', async () => {
+      // 1. Create annotation
+      const addRes = await httpRequest(`${baseUrl}/api/annotations`, 'POST', {
+        file: 'replies.md',
+        action: 'add',
+        data: {
+          selectors: {
+            position: { startLine: 5, startColumn: 3, endLine: 5, endColumn: 11 },
+            quote: { exact: 'Item one', prefix: '- ', suffix: '\n' },
+          },
+          comment: 'Review this',
+          tag: 'question',
+          author: 'Alice',
+        },
+      })
+      expect(addRes.status).toBe(200)
+      const annId = addRes.json().annotations[0].id
+
+      // 2. Add a reply
+      const replyRes = await httpRequest(`${baseUrl}/api/annotations`, 'POST', {
+        file: 'replies.md',
+        action: 'reply',
+        data: { id: annId, author: 'Bob', comment: 'to delete' },
+      })
+      expect(replyRes.status).toBe(200)
+      const replyId = replyRes.json().annotations.find(a => a.id === annId).replies[0].id
+
+      // 3. Delete the reply
+      const delRes = await httpRequest(`${baseUrl}/api/annotations`, 'POST', {
+        file: 'replies.md',
+        action: 'deleteReply',
+        data: { id: annId, replyId },
+      })
+
+      expect(delRes.status).toBe(200)
+      const ann = delRes.json().annotations.find(a => a.id === annId)
+      expect(ann.replies).toHaveLength(0)
+    })
+  })
+
   it('POST /api/broadcast forwards message to WebSocket clients', async () => {
     await writeFixture('broadcast-test.md', '# Broadcast\n\nHello')
     const s = track(await createServer({ files: [node_path.join(tmpDir, 'broadcast-test.md')], port: 0, open: false }))

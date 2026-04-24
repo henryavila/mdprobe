@@ -225,6 +225,21 @@ export class AnnotationFile {
     })
   }
 
+  editReply(annotationId, replyId, comment) {
+    const ann = this._findOrThrow(annotationId)
+    const reply = ann.replies.find(r => r.id === replyId)
+    if (!reply) throw new Error(`Reply ${replyId} not found on ${annotationId}`)
+    reply.comment = comment
+    reply.updated_at = new Date().toISOString()
+  }
+
+  deleteReply(annotationId, replyId) {
+    const ann = this._findOrThrow(annotationId)
+    const before = ann.replies.length
+    ann.replies = ann.replies.filter(r => r.id !== replyId)
+    if (ann.replies.length === before) throw new Error(`Reply ${replyId} not found on ${annotationId}`)
+  }
+
   // ---------------------------------------------------------------------------
   // Query methods
   // ---------------------------------------------------------------------------
