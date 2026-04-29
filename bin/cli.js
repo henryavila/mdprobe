@@ -50,6 +50,7 @@ Subcommands:
   mcp                    Start MCP server (stdio, used by Claude Code)
   config [key] [value]   Manage configuration
   export <path> [flags]  Export annotations (--report, --inline, --json, --sarif)
+  migrate <path> [--dry-run]  Batch migrate v1 annotations to v2
 `)
 }
 
@@ -65,6 +66,19 @@ function fatal(msg) {
 
 async function main() {
   const args = [...rawArgs]
+
+  // ---- migrate subcommand (early exit) ----
+  if (args[0] === 'migrate') {
+    const { runMigrate } = await import('../src/cli/migrate-cmd.js')
+    const target = args[1]
+    if (!target) {
+      console.error('Usage: mdprobe migrate <path-or-dir> [--dry-run]')
+      process.exit(1)
+    }
+    const dryRun = args.includes('--dry-run')
+    const stats = runMigrate(target, { dryRun })
+    process.exit(stats.errors > 0 ? 1 : 0)
+  }
 
   // Determine mode from subcommand
   const mode = ['mcp', 'setup', 'config', 'export'].includes(args[0])
