@@ -8,7 +8,10 @@
 
 import updateNotifier from 'update-notifier'
 
-const SUBCOMMANDS_WITHOUT_BANNER = new Set(['update', 'stop', 'migrate'])
+// Spec §4 lists `setup --remove` as banner-suppressed. We broaden to all
+// `setup` invocations because setup is a wizard-style interactive command —
+// banner pollution is bad UX whether the flag is --remove, --yes, or bare.
+const SUBCOMMANDS_WITHOUT_BANNER = new Set(['update', 'stop', 'migrate', 'setup'])
 
 /**
  * Pure suppression decision. Exported for test debuggability; the public API

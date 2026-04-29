@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Mock update-notifier so we can spy on calls without performing
 // any real network I/O or 24h cache writes during tests.
@@ -19,10 +19,6 @@ const PKG = { name: '@henryavila/mdprobe', version: '0.5.0' }
 beforeEach(() => {
   factoryMock.mockClear()
   notifyMock.mockClear()
-})
-
-afterEach(() => {
-  vi.clearAllMocks()
 })
 
 // ---------------------------------------------------------------------------
@@ -108,6 +104,27 @@ describe('setupNotifier — suppression matrix', () => {
       args: ['migrate'],
       expected: 'suppress',
     },
+    {
+      name: 'setup subcommand (bare): suppress',
+      tty: { stdout: true, stderr: true },
+      env: { NODE_ENV: 'production' },
+      args: ['setup'],
+      expected: 'suppress',
+    },
+    {
+      name: 'setup --yes subcommand: suppress',
+      tty: { stdout: true, stderr: true },
+      env: { NODE_ENV: 'production' },
+      args: ['setup', '--yes'],
+      expected: 'suppress',
+    },
+    {
+      name: 'setup --remove subcommand: suppress',
+      tty: { stdout: true, stderr: true },
+      env: { NODE_ENV: 'production' },
+      args: ['setup', '--remove'],
+      expected: 'suppress',
+    },
   ]
 
   for (const c of cases) {
@@ -158,6 +175,19 @@ describe('setupNotifier — show path', () => {
     expect(message).toContain('https://github.com/henryavila/mdprobe/releases')
     expect(message).toContain('Run: mdprobe update')
     expect(message).toContain('NO_UPDATE_NOTIFIER')
+  })
+
+  // Regression guard: update-notifier expands {currentVersion} and
+  // {latestVersion} at notify-time. If the banner is ever refactored to
+  // use JS template literals (`${...}`), the version numbers would be
+  // baked in at module load time and stale. Assert the literal tokens
+  // (with curly braces) survive into the message handed to update-notifier.
+  it('banner message preserves {currentVersion} and {latestVersion} template tokens', () => {
+    setupNotifier(PKG, [], showEnv, showTty)
+
+    const message = notifyMock.mock.calls[0][0].message
+    expect(message).toContain('{currentVersion}')
+    expect(message).toContain('{latestVersion}')
   })
 })
 
