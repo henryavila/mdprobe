@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { homedir } from 'node:os'
+import { join as pathJoin } from 'node:path'
 
 import {
   detectPackageManager,
@@ -137,6 +139,48 @@ describe('detectPackageManager — which fallback', () => {
 })
 
 // ---------------------------------------------------------------------------
+// detectPackageManager: which/where portability across platforms
+// ---------------------------------------------------------------------------
+
+describe('detectPackageManager — which/where portability', () => {
+  it('uses "which" on linux to probe binaries', () => {
+    const env = { PROCESS_PLATFORM: 'linux' }
+    const exec = makeFakeExec({
+      'which pnpm': '/usr/local/bin/pnpm',
+    })
+    expect(detectPackageManager(env, exec)).toBe('pnpm')
+    // Every probe must be `which`, never `where`.
+    for (const call of exec.calls) {
+      expect(call.cmd).toBe('which')
+    }
+  })
+
+  it('uses "where" on win32 to probe binaries (Windows portability)', () => {
+    const env = { PROCESS_PLATFORM: 'win32' }
+    const exec = makeFakeExec({
+      'where pnpm': 'C:\\Program Files\\nodejs\\pnpm.cmd',
+    })
+    expect(detectPackageManager(env, exec)).toBe('pnpm')
+    // No `which` calls allowed on win32.
+    for (const call of exec.calls) {
+      expect(call.cmd).toBe('where')
+    }
+  })
+
+  it('on win32 falls through "where" chain to npm when nothing is on PATH', () => {
+    const env = { PROCESS_PLATFORM: 'win32' }
+    const exec = makeFakeExec()
+    expect(detectPackageManager(env, exec)).toBe('npm')
+    // All probes used `where`.
+    for (const call of exec.calls) {
+      expect(call.cmd).toBe('where')
+    }
+    // And we tried at least one probe.
+    expect(exec.calls.length).toBeGreaterThan(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // detectGlobalRoot
 // ---------------------------------------------------------------------------
 
@@ -145,7 +189,7 @@ describe('detectGlobalRoot', () => {
     const exec = makeFakeExec({
       'npm root -g': '/usr/local/lib/node_modules',
     })
-    expect(detectGlobalRoot('npm', exec)).toBe('/usr/local/lib/node_modules')
+    expect(detectGlobalRoot('npm', {}, exec)).toBe('/usr/local/lib/node_modules')
     expect(exec.calls).toEqual([
       { cmd: 'npm', args: ['root', '-g'], key: 'npm root -g' },
     ])
@@ -155,7 +199,7 @@ describe('detectGlobalRoot', () => {
     const exec = makeFakeExec({
       'pnpm root -g': '/home/user/.local/share/pnpm/global/5/node_modules',
     })
-    expect(detectGlobalRoot('pnpm', exec)).toBe(
+    expect(detectGlobalRoot('pnpm', {}, exec)).toBe(
       '/home/user/.local/share/pnpm/global/5/node_modules'
     )
     expect(exec.calls).toEqual([
@@ -167,27 +211,34 @@ describe('detectGlobalRoot', () => {
     const exec = makeFakeExec({
       'yarn global dir': '/home/user/.config/yarn/global',
     })
-    expect(detectGlobalRoot('yarn', exec)).toBe('/home/user/.config/yarn/global')
+    expect(detectGlobalRoot('yarn', {}, exec)).toBe('/home/user/.config/yarn/global')
     expect(exec.calls).toEqual([
       { cmd: 'yarn', args: ['global', 'dir'], key: 'yarn global dir' },
     ])
   })
 
-  it('runs "bun pm -g bin" for bun', () => {
-    const exec = makeFakeExec({
-      'bun pm -g bin': '/home/user/.bun/bin',
-    })
-    expect(detectGlobalRoot('bun', exec)).toBe('/home/user/.bun/bin')
-    expect(exec.calls).toEqual([
-      { cmd: 'bun', args: ['pm', '-g', 'bin'], key: 'bun pm -g bin' },
-    ])
+  it('derives bun global root from BUN_INSTALL env var (no runner call)', () => {
+    const exec = makeFakeExec()
+    const result = detectGlobalRoot('bun', { BUN_INSTALL: '/custom/bun' }, exec)
+    expect(result).toBe(pathJoin('/custom/bun', 'install', 'global', 'node_modules'))
+    // bun must NOT shell out — the path is computed from env + os.homedir().
+    expect(exec.calls.length).toBe(0)
+  })
+
+  it('falls back to <homedir>/.bun when BUN_INSTALL is unset', () => {
+    const exec = makeFakeExec()
+    const result = detectGlobalRoot('bun', {}, exec)
+    expect(result).toBe(
+      pathJoin(homedir(), '.bun', 'install', 'global', 'node_modules')
+    )
+    expect(exec.calls.length).toBe(0)
   })
 
   it('throws on unknown package manager', () => {
     const exec = makeFakeExec()
-    expect(() => detectGlobalRoot('cargo', exec)).toThrow()
-    expect(() => detectGlobalRoot('', exec)).toThrow()
-    expect(() => detectGlobalRoot(undefined, exec)).toThrow()
+    expect(() => detectGlobalRoot('cargo', {}, exec)).toThrow()
+    expect(() => detectGlobalRoot('', {}, exec)).toThrow()
+    expect(() => detectGlobalRoot(undefined, {}, exec)).toThrow()
   })
 
   it('always passes argv as an array (never a shell string)', () => {
@@ -195,11 +246,12 @@ describe('detectGlobalRoot', () => {
       'npm root -g': '/x',
       'pnpm root -g': '/x',
       'yarn global dir': '/x',
-      'bun pm -g bin': '/x',
     })
-    for (const pm of ['npm', 'pnpm', 'yarn', 'bun']) {
-      detectGlobalRoot(pm, exec)
+    for (const pm of ['npm', 'pnpm', 'yarn']) {
+      detectGlobalRoot(pm, {}, exec)
     }
+    // bun uses no runner — covered by separate tests above.
+    detectGlobalRoot('bun', { BUN_INSTALL: '/x' }, exec)
     for (const call of exec.calls) {
       expect(Array.isArray(call.args)).toBe(true)
       expect(call.cmd).not.toMatch(/\s/)

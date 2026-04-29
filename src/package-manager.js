@@ -7,7 +7,8 @@
  * Detection is best-effort:
  *   1. Inspect `process.env.npm_config_user_agent` — set by every PM when it
  *      invokes a lifecycle script. Conclusive when present.
- *   2. Otherwise fall through to a `which`-based lookup of each PM binary.
+ *   2. Otherwise fall through to a `which`/`where`-based lookup of each PM
+ *      binary (`where` on Windows, `which` everywhere else).
  *   3. As a last resort, return `'npm'` — npm ships with every Node install.
  *
  * Security: We always shell out via `execFileSync` from `node:child_process`
@@ -21,16 +22,24 @@
  */
 
 import * as childProcess from 'node:child_process'
+import { homedir } from 'node:os'
+import { join as pathJoin } from 'node:path'
 
 /** Recognized package managers, in `which` fallback priority order. */
 const KNOWN_PMS = Object.freeze(['pnpm', 'yarn', 'bun', 'npm'])
 
-/** Argv recipes for `detectGlobalRoot`. Each entry is a complete argv array. */
+/**
+ * Argv recipes for `detectGlobalRoot`. Each entry is a complete argv array.
+ *
+ * Note: bun is intentionally NOT listed here. `bun pm -g bin` returns the
+ * binary directory (e.g. `~/.bun/bin`), not the package root we need to
+ * resolve `<root>/<package>/CHANGELOG.md`. bun's package root is always
+ * `$BUN_INSTALL/install/global/node_modules` and we compute it directly.
+ */
 const GLOBAL_ROOT_RECIPES = Object.freeze({
   npm: ['npm', ['root', '-g']],
   pnpm: ['pnpm', ['root', '-g']],
   yarn: ['yarn', ['global', 'dir']],
-  bun: ['bun', ['pm', '-g', 'bin']],
 })
 
 /**
@@ -67,16 +76,35 @@ function pmFromUserAgent(ua) {
 }
 
 /**
- * Probe whether a binary exists on PATH using `which`. Returns true if the
- * runner produces any non-empty output, false on any error.
+ * Pick the platform-appropriate "binary on PATH" probe.
+ *
+ * Unix-like systems ship `which`; Windows ships `where` and has no `which`
+ * by default. Although mdprobe runs on WSL2/Linux today, the npm package
+ * has no `os` field restricting it, so we branch defensively.
+ *
+ * The platform can be overridden via `env.PROCESS_PLATFORM` so tests can
+ * exercise both branches without mocking `process.platform` globally.
+ *
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {'which'|'where'}
+ */
+function pickWhichBinary(env) {
+  const platform = env?.PROCESS_PLATFORM ?? process.platform
+  return platform === 'win32' ? 'where' : 'which'
+}
+
+/**
+ * Probe whether a binary exists on PATH. Returns true if the runner
+ * produces any non-empty output, false on any error.
  *
  * @param {string} binary
+ * @param {string} whichBin  Either 'which' (Unix) or 'where' (Windows).
  * @param {(cmd: string, args: string[]) => string} runner
  * @returns {boolean}
  */
-function whichExists(binary, runner) {
+function whichExists(binary, whichBin, runner) {
   try {
-    const out = runner('which', [binary])
+    const out = runner(whichBin, [binary])
     return typeof out === 'string' && out.trim().length > 0
   } catch {
     return false
@@ -94,8 +122,9 @@ export function detectPackageManager(env = process.env, runner = defaultRunner) 
   const fromUa = pmFromUserAgent(env?.npm_config_user_agent ?? '')
   if (fromUa) return fromUa
 
+  const whichBin = pickWhichBinary(env)
   for (const pm of KNOWN_PMS) {
-    if (whichExists(pm, runner)) return pm
+    if (whichExists(pm, whichBin, runner)) return pm
   }
 
   // Ultimate fallback: npm is universal — every Node install ships it.
@@ -105,12 +134,26 @@ export function detectPackageManager(env = process.env, runner = defaultRunner) 
 /**
  * Detect the global install root for the given package manager.
  *
+ * For npm/pnpm/yarn this shells out to the PM's own "root" command. For
+ * bun we compute the path directly from `BUN_INSTALL` (default: `~/.bun`)
+ * because `bun pm -g bin` returns the **binary** dir, not the package
+ * root we need to resolve `<root>/<package>/CHANGELOG.md`.
+ *
  * @param {'npm'|'pnpm'|'yarn'|'bun'} pm
+ * @param {NodeJS.ProcessEnv} [env]
  * @param {(cmd: string, args: string[]) => string} [runner]
- * @returns {string} Trimmed stdout from the PM-specific command.
+ * @returns {string} Absolute path to the global node_modules / package root.
  * @throws {Error} If `pm` is not a recognized package manager.
  */
-export function detectGlobalRoot(pm, runner = defaultRunner) {
+export function detectGlobalRoot(pm, env = process.env, runner = defaultRunner) {
+  if (pm === 'bun') {
+    // bun's global layout: $BUN_INSTALL/install/global/node_modules/<pkg>.
+    // `bun pm -g bin` would return $BUN_INSTALL/bin, which is the wrong tree
+    // for resolving package files like CHANGELOG.md.
+    const bunInstall = env?.BUN_INSTALL ?? pathJoin(homedir(), '.bun')
+    return pathJoin(bunInstall, 'install', 'global', 'node_modules')
+  }
+
   const recipe = GLOBAL_ROOT_RECIPES[pm]
   if (!recipe) {
     throw new Error(`Unknown package manager: ${JSON.stringify(pm)}`)
