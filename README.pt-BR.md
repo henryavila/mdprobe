@@ -133,6 +133,19 @@ Humano vê os itens resolvidos em tempo real (em cinza)
 
 O servidor permanece ativo durante toda a conversa. Múltiplos arquivos podem ser revisados na mesma sessão.
 
+### 5.5. Atualizando
+
+```bash
+mdprobe update              # interativo: confirma antes de instalar
+mdprobe update --yes        # pula o prompt de confirmação
+mdprobe update --dry-run    # mostra o que aconteceria, sem instalar
+mdprobe update --force      # reinstala mesmo já estando na última versão
+```
+
+Detecta seu gerenciador de pacotes (npm/pnpm/yarn/bun), para o servidor em execução se houver, instala a versão mais recente e imprime "What's new" a partir do changelog da nova versão.
+
+Quando uma nova versão está disponível, o mdProbe também exibe um banner discreto na inicialização. Para silenciar: `export NO_UPDATE_NOTIFIER=1`. O banner é automaticamente suprimido em CI, em pipes, e durante o modo `--once`.
+
 ---
 
 ## Funcionalidades

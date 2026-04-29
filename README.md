@@ -133,6 +133,19 @@ Human sees resolved items in real-time (greyed out)
 
 The server stays running across the entire conversation. Multiple files can be reviewed in the same session.
 
+### 5.5. Updating
+
+```bash
+mdprobe update              # interactive: confirms before installing
+mdprobe update --yes        # skip the confirmation prompt
+mdprobe update --dry-run    # show what would happen, don't install
+mdprobe update --force      # reinstall even if already on latest
+```
+
+Detects your package manager (npm/pnpm/yarn/bun), stops the running server if any, installs the latest version, and prints "What's new" from the new release's changelog.
+
+When a new release is available, mdProbe also shows a discreet banner at startup. To silence it: `export NO_UPDATE_NOTIFIER=1`. The banner is automatically suppressed in CI, in pipes, and during `--once` mode.
+
 ---
 
 ## Features
