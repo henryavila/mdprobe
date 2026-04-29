@@ -152,3 +152,5 @@ export const driftedAnnotations = computed(() =>
 export const orphanedAnnotationsV2 = computed(() =>
   annotations.value.filter(a => a.status === 'orphan')
 )
+
+export const liveAnchors = signal({})  // Map<annotationId, { range, contextHash }>

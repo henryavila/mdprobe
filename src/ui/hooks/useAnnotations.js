@@ -100,6 +100,12 @@ export function useAnnotations() {
     if (data.annotations) setAnnotations(data.annotations)
   }
 
+  /** Accept the current drifted location as the new canonical anchor for an annotation. */
+  async function acceptDrift(id, range, contextHash) {
+    const data = await postAnnotation('acceptDrift', { id, range, contextHash })
+    if (data.annotations) setAnnotations(data.annotations)
+  }
+
   // ---------------------------------------------------------------------------
   // Sections
   // ---------------------------------------------------------------------------
@@ -179,6 +185,7 @@ export function useAnnotations() {
     addReply,
     editReply,
     deleteReply,
+    acceptDrift,
     approveSection,
     rejectSection,
     resetSection,

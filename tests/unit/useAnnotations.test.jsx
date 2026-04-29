@@ -306,6 +306,22 @@ describe('useAnnotations', () => {
   })
 
   // -------------------------------------------------------------------------
+  // acceptDrift
+  // -------------------------------------------------------------------------
+
+  describe('acceptDrift', () => {
+    it('posts the right payload', async () => {
+      globalThis.fetch = mockFetch({ annotations: [] })
+
+      await ops.acceptDrift('a1', { start: 100, end: 110 }, 'sha256:abc')
+
+      const body = JSON.parse(globalThis.fetch.mock.calls[0][1].body)
+      expect(body.action).toBe('acceptDrift')
+      expect(body.data).toEqual({ id: 'a1', range: { start: 100, end: 110 }, contextHash: 'sha256:abc' })
+    })
+  })
+
+  // -------------------------------------------------------------------------
   // Error handling
   // -------------------------------------------------------------------------
 

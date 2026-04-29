@@ -254,6 +254,22 @@ export class AnnotationFile {
     if (ann.replies.length === before) throw new Error(`Reply ${replyId} not found on ${annotationId}`)
   }
 
+  /**
+   * Accepts a drifted annotation's new location by updating its range and
+   * contextHash, then resetting status to 'open'.
+   * @param {string} annotationId
+   * @param {{ start: number, end: number }} currentRange
+   * @param {string} currentContextHash
+   */
+  acceptDrift(annotationId, currentRange, currentContextHash) {
+    const ann = this._findOrThrow(annotationId)
+    ann.range = currentRange
+    if (!ann.anchor) ann.anchor = {}
+    ann.anchor.contextHash = currentContextHash
+    ann.status = 'open'
+    ann.updated_at = new Date().toISOString()
+  }
+
   // ---------------------------------------------------------------------------
   // Query methods
   // ---------------------------------------------------------------------------

@@ -687,6 +687,9 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
           case 'deleteReply':
             af.deleteReply(data.id, data.replyId)
             break
+          case 'acceptDrift':
+            af.acceptDrift(data.id, data.range, data.contextHash)
+            break
           default:
             return sendJSON(res, 400, { error: `Unknown action: ${action}` })
         }

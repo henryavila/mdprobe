@@ -2,7 +2,7 @@ import { useState } from 'preact/hooks'
 import { rightPanelOpen, filteredAnnotations, selectedAnnotationId, showResolved,
          filterTag, filterAuthor, uniqueTags, uniqueAuthors, openAnnotations,
          anchoredAnnotations, orphanedAnnotations, driftWarning, openAnnotationModal,
-         driftedAnnotations, orphanedAnnotationsV2 } from '../state/store.js'
+         driftedAnnotations, orphanedAnnotationsV2, liveAnchors } from '../state/store.js'
 
 export function RightPanel({ annotationOps }) {
   const isCollapsed = !rightPanelOpen.value
@@ -204,7 +204,10 @@ function DriftedSection({ annotations, annotationOps }) {
           <div class="quote">{ann.quote?.exact}</div>
           <div style="font-size: 13px; margin-top: 4px">{ann.comment}</div>
           <div style="margin-top: 6px; display: flex; gap: 6px">
-            <button class="btn btn-sm" onClick={() => annotationOps.acceptDrift?.(ann.id)}>Aceitar nova localização</button>
+            <button class="btn btn-sm" onClick={() => {
+              const live = liveAnchors.value[ann.id]
+              if (live) annotationOps.acceptDrift(ann.id, live.range, live.contextHash)
+            }}>Aceitar nova localização</button>
             <button class="btn btn-sm btn-danger" onClick={() => {
               if (confirm('Descartar esta anotação?')) annotationOps.deleteAnnotation(ann.id)
             }}>Descartar</button>

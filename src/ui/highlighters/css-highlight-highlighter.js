@@ -1,4 +1,5 @@
-import { locate, buildDomRanges } from '../../anchoring/v2/index.js'
+import { locate, buildDomRanges, computeContextHash } from '../../anchoring/v2/index.js'
+import { liveAnchors } from '../state/store.js'
 
 const TAG_COLORS = {
   question:   [137, 180, 250],
@@ -74,6 +75,13 @@ export function createCssHighlightHighlighter() {
       registry.set(id, { highlight: null, ranges, state: r.state, name: `ann-${ann.id}`, ann })
     }
     upsertRule(ann, r.state)
+    // Populate liveAnchors so the "Accept drift" button can read the current location
+    const liveContextHash = computeContextHash(
+      source.slice(Math.max(0, r.range.start - 32), r.range.start),
+      source.slice(r.range.start, r.range.end),
+      source.slice(r.range.end, Math.min(source.length, r.range.end + 32)),
+    )
+    liveAnchors.value = { ...liveAnchors.value, [ann.id]: { range: r.range, contextHash: liveContextHash } }
     return r
   }
 
@@ -83,6 +91,12 @@ export function createCssHighlightHighlighter() {
     if (CSS_HIGHLIGHTS_SUPPORTED) CSS.highlights.delete(entry.name)
     registry.delete(id)
     removeRule(id)
+    // Clean up stale liveAnchors entry
+    if (liveAnchors.value[id]) {
+      const next = { ...liveAnchors.value }
+      delete next[id]
+      liveAnchors.value = next
+    }
   }
 
   function sync(contentEl, annotations, opts) {
