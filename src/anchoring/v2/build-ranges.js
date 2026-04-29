@@ -6,6 +6,15 @@ export function buildDomRanges(contentEl, start, end) {
     const elEnd = parseInt(el.dataset.sourceEnd, 10)
     if (elEnd <= start || elStart >= end) continue
 
+    // Skip this element if a direct child has the same source range.
+    // This happens with <pre>/<code> pairs where both carry identical
+    // data-source-start/end attributes from rehypeSourcePositions.
+    // Prefer the innermost (child) element to avoid duplicate ranges.
+    const hasSameRangeChild = el.querySelector(
+      `[data-source-start="${el.dataset.sourceStart}"][data-source-end="${el.dataset.sourceEnd}"]`,
+    )
+    if (hasSameRangeChild) continue
+
     const localStart = Math.max(0, start - elStart)
     const localEnd = Math.min(elEnd - elStart, end - elStart)
 
