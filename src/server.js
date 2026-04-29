@@ -5,11 +5,27 @@ import node_net from 'node:net'
 import { URL } from 'node:url'
 import { WebSocketServer } from 'ws'
 import { watch } from 'chokidar'
+import { unified } from 'unified'
+import remarkParse from 'remark-parse'
+import remarkGfm from 'remark-gfm'
 import { render } from './renderer.js'
 import { AnnotationFile, computeSectionStatus } from './annotations.js'
 import { detectDrift } from './hash.js'
-import { reanchorAll } from './anchoring.js'
+import { locate } from './anchoring/v2/index.js'
 import { createLogger } from './telemetry.js'
+
+function reanchorAllV2(anns, source) {
+  const mdast = unified().use(remarkParse).use(remarkGfm).parse(source)
+  const result = new Map()
+  for (const ann of anns) {
+    const r = locate(ann, source, mdast)
+    result.set(ann.id, {
+      status: r.state === 'orphan' ? 'orphan' : 'anchored',
+      position: r.range || null,
+    })
+  }
+  return result
+}
 
 const tel = createLogger('server')
 
@@ -444,7 +460,7 @@ export async function createServer(options) {
           if (drift.drifted) {
             const af = await AnnotationFile.load(sidecarPath)
             const anns = af.toJSON().annotations
-            const anchorResults = reanchorAll(anns, content)
+            const anchorResults = reanchorAllV2(anns, content)
             broadcastToAll({
               type: 'drift',
               warning: true,
@@ -616,7 +632,7 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
             const drift = await detectDrift(sidecarPath, match)
             if (drift.drifted) {
               const content = await node_fs.readFile(match, 'utf8')
-              const anchorResults = reanchorAll(json.annotations, content)
+              const anchorResults = reanchorAllV2(json.annotations, content)
               json.drift = {
                 anchorStatus: Object.fromEntries(
                   [...anchorResults].map(([id, r]) => [id, r.status === 'orphan' ? 'orphan' : 'anchored'])
