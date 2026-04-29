@@ -148,6 +148,7 @@ async function captureAll() {
   const ctx1 = await startServer({
     files: ['demo.md', 'demo-thumbnail.png'],
     withAnnotations: true,
+    author: 'you',
   })
   console.log(`  Server 1 at ${ctx1.url}\n`)
 
@@ -242,7 +243,10 @@ async function captureAll() {
 
     // -----------------------------------------------------------------------
     // 4. screenshot-overlap.png
-    //    Authentication section, no panels — shows alpha blending
+    //    Tight zoom into the overlapping "expire after 24 hours" text —
+    //    annotation 1 (question, 865-935) + annotation 5 (bug, 909-935)
+    //    both cover this phrase, so alpha-blending of two different tag
+    //    colors is visible here.
     // -----------------------------------------------------------------------
     console.log('[4/6] screenshot-overlap.png (1280x720)...')
     {
@@ -259,10 +263,45 @@ async function captureAll() {
       // Collapse panels for focus on highlights
       await collapseAllPanels(page)
 
-      // Scroll to Authentication — overlap is on "expire after **24 hours**."
+      // Scroll to Authentication section so the relevant paragraph is visible
       await scrollToHeading(page, 'h3', 'Authentication')
+      await page.waitForTimeout(300)
 
-      await page.screenshot({ path: join(repoRoot, 'screenshot-overlap.png'), fullPage: false })
+      // Find the paragraph containing "expire after" and clip the screenshot
+      // tightly around it so the two overlapping highlight colors are prominent.
+      const clipRect = await page.evaluate(() => {
+        const walker = document.createTreeWalker(
+          document.querySelector('.content-area') || document.body,
+          NodeFilter.SHOW_TEXT,
+        )
+        let node
+        while ((node = walker.nextNode())) {
+          if (node.textContent.includes('expire after')) {
+            const el = node.parentElement
+            const para = el.closest('p') || el
+            const rect = para.getBoundingClientRect()
+            return {
+              x: Math.max(0, rect.left - 32),
+              y: Math.max(0, rect.top - 48),
+              width: Math.min(window.innerWidth - Math.max(0, rect.left - 32), rect.width + 64),
+              height: rect.height + 96,
+            }
+          }
+        }
+        return null
+      })
+
+      if (clipRect) {
+        console.log(`  clip rect: ${JSON.stringify(clipRect)}`)
+        await page.screenshot({
+          path: join(repoRoot, 'screenshot-overlap.png'),
+          clip: clipRect,
+          fullPage: false,
+        })
+      } else {
+        console.warn('  [warn] Could not find "expire after" text node — falling back to full page')
+        await page.screenshot({ path: join(repoRoot, 'screenshot-overlap.png'), fullPage: false })
+      }
       await page.close()
       console.log('  ✓ screenshot-overlap.png')
     }
@@ -290,7 +329,7 @@ async function captureAll() {
     files: [join(tmpDir2, 'demo-edited.md')],
     port: 0,
     open: false,
-    author: 'e2e-tester',
+    author: 'you',
   })
   console.log(`  Server 2 at ${serverDrifted.url}\n`)
 
@@ -362,7 +401,7 @@ async function captureAll() {
     port: 0,
     open: false,
     once: true,
-    author: 'e2e-tester',
+    author: 'you',
   })
   console.log(`  Server 3 at ${serverOnce.url}\n`)
 
