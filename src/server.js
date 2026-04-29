@@ -578,6 +578,21 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
         })
       }
 
+      // GET /api/source?path=<path> — return raw markdown source
+      if (req.method === 'GET' && pathname === '/api/source') {
+        const queryPath = parsedUrl.searchParams.get('path')
+        if (!queryPath) {
+          return sendJSON(res, 400, { error: 'Missing ?path= parameter' })
+        }
+        const match = findFile(resolvedFiles, queryPath)
+        if (!match) {
+          return sendJSON(res, 404, { error: `File not found: ${queryPath}` })
+        }
+        const text = await node_fs.readFile(match, 'utf-8')
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Length': Buffer.byteLength(text) })
+        return res.end(text)
+      }
+
       // GET /api/annotations?path=<path>
       if (req.method === 'GET' && pathname === '/api/annotations') {
         const queryPath = parsedUrl.searchParams.get('path')

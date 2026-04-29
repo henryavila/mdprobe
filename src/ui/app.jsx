@@ -1,5 +1,8 @@
 import { render } from 'preact'
 import { useState, useEffect, useCallback } from 'preact/hooks'
+import { unified } from 'unified'
+import remarkParse from 'remark-parse'
+import remarkGfm from 'remark-gfm'
 import { useWebSocket } from './hooks/useWebSocket.js'
 import { useKeyboard } from './hooks/useKeyboard.js'
 import { useTheme } from './hooks/useTheme.js'
@@ -7,7 +10,9 @@ import { useAnnotations } from './hooks/useAnnotations.js'
 import { useClientLibs } from './hooks/useClientLibs.js'
 import { files, currentFile, currentHtml, currentToc, author, reviewMode,
          leftPanelOpen, rightPanelOpen, openAnnotations, sectionStats, driftWarning,
-         orphanedAnnotations } from './state/store.js'
+         orphanedAnnotations, currentSource, currentMdast } from './state/store.js'
+import { isHighlightApiSupported } from './highlighters/capability.js'
+import { UnsupportedModal } from './highlighters/unsupported-modal.jsx'
 import { LeftPanel } from './components/LeftPanel.jsx'
 import { RightPanel } from './components/RightPanel.jsx'
 import { Content } from './components/Content.jsx'
@@ -17,6 +22,10 @@ import { AnnotationModal } from './components/AnnotationModal.jsx'
 import './styles/themes.css'
 
 function App() {
+  if (!isHighlightApiSupported()) {
+    return <UnsupportedModal />
+  }
+
   const [showHelp, setShowHelp] = useState(false)
   const ws = useWebSocket()
   const { setTheme, themes } = useTheme()
@@ -75,9 +84,14 @@ function App() {
 
   function handleFileSelect(filePath) {
     currentFile.value = filePath
-    fetch(`/api/file?path=${encodeURIComponent(filePath)}`).then(r => r.json()).then(d => {
+    Promise.all([
+      fetch(`/api/file?path=${encodeURIComponent(filePath)}`).then(r => r.json()),
+      fetch(`/api/source?path=${encodeURIComponent(filePath)}`).then(r => r.text()),
+    ]).then(([d, source]) => {
       currentHtml.value = d.html
       currentToc.value = d.toc || []
+      currentSource.value = source
+      currentMdast.value = unified().use(remarkParse).use(remarkGfm).parse(source)
     })
     annotationOps.fetchAnnotations(filePath)
   }
