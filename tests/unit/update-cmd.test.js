@@ -182,7 +182,6 @@ describe('runUpdate — happy path', () => {
     const deps = makeDeps({
       confirm: vi.fn(async () => true),
       env: { NODE_ENV: 'test', FAKE_TTY: '1' },
-      stdoutIsTTY: true,
     })
     deps.stdout.isTTY = true
     const code = await runUpdate({}, { ...deps, stdout: deps.stdout })
@@ -312,6 +311,62 @@ describe('runUpdate — singleton handling', () => {
       killSpy.mockRestore()
     }
   })
+
+  it('--yes + live singleton + TTY → singleton prompt fires (spec §5 step 7)', async () => {
+    // Per spec, --yes only skips the update confirmation; the singleton prompt
+    // still fires when a TTY is available. Only --force skips the singleton
+    // prompt.
+    const singletonConfirm = vi.fn(async () => true)
+    const deps = makeDeps({
+      readLockFile: vi.fn(async () => ({
+        pid: 9999,
+        port: 3000,
+        url: 'http://localhost:3000',
+        startedAt: new Date().toISOString(),
+      })),
+      isProcessAlive: vi.fn().mockReturnValueOnce(true).mockReturnValue(false),
+      confirm: singletonConfirm,
+    })
+    deps.stdout.isTTY = true
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true)
+    try {
+      const code = await runUpdate({ yes: true }, deps)
+      expect(code).toBe(0)
+      // --yes skips update prompt, but singleton prompt must still fire.
+      expect(singletonConfirm).toHaveBeenCalledTimes(1)
+      // Confirm message references the running server.
+      const arg = singletonConfirm.mock.calls[0][0]
+      expect(arg.message).toMatch(/Server is running/i)
+      expect(killSpy).toHaveBeenCalledWith(9999, 'SIGTERM')
+    } finally {
+      killSpy.mockRestore()
+    }
+  })
+
+  it('--yes + live singleton + NO TTY → abort with --force hint, exit 0', async () => {
+    // CI/non-interactive scenario: no TTY means we can't prompt and --yes
+    // alone is not enough to silently kill the singleton. Abort with a clear
+    // hint suggesting --force.
+    const deps = makeDeps({
+      readLockFile: vi.fn(async () => ({
+        pid: 9999,
+        port: 3000,
+        url: 'http://localhost:3000',
+        startedAt: new Date().toISOString(),
+      })),
+      isProcessAlive: vi.fn(() => true),
+      confirm: vi.fn(),
+    })
+    deps.stdout.isTTY = false
+    const code = await runUpdate({ yes: true }, deps)
+    expect(code).toBe(0)
+    // Confirm should NOT be called (no TTY).
+    expect(deps.confirm).not.toHaveBeenCalled()
+    const out = deps.stdout.text + deps.stderr.text
+    expect(out).toMatch(/--force/)
+    // Should not have spawned install.
+    expect(deps.spawn.calls.length).toBe(0)
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -350,10 +405,50 @@ describe('runUpdate — error mapping', () => {
     expect(code).toBe(2)
     const out = deps.stdout.text + deps.stderr.text
     expect(out).toMatch(/Permission denied/i)
-    expect(out).toMatch(/sudo/)
+    // Default detected PM in makeDeps is npm.
+    expect(out).toMatch(/sudo npm i -g @henryavila\/mdprobe/)
     expect(out).toMatch(/https:\/\/github\.com\/nvm-sh\/nvm/)
     expect(out).toMatch(/npm config set prefix/)
     expect(out).toMatch(/Current version: 0\.5\.0/)
+  })
+
+  it.each([
+    ['pnpm'],
+    ['yarn'],
+    ['bun'],
+  ])('spawn EACCES with %s → sudo command uses the detected PM', async (pm) => {
+    const deps = makeDeps({
+      detectPackageManager: vi.fn(() => pm),
+      spawn: makeFakeSpawn({ exitCode: 243, stderr: 'EACCES: permission denied' }),
+    })
+    const code = await runUpdate({ yes: true }, deps)
+    expect(code).toBe(2)
+    const out = deps.stdout.text + deps.stderr.text
+    expect(out).toMatch(new RegExp(`sudo ${pm} i -g @henryavila/mdprobe`))
+  })
+
+  it('spawn ENOENT (PM binary missing) → exit code 1, not 2 (avoid EACCES collision)', async () => {
+    // Issue 4: when spawn emits an ENOENT error, exit code must NOT be 2
+    // because callers can't distinguish from EACCES.
+    const failingSpawn = vi.fn(() => {
+      const child = new EventEmitter()
+      child.stdout = new EventEmitter()
+      child.stderr = new EventEmitter()
+      child.kill = () => {}
+      const err = Object.assign(new Error('spawn npm ENOENT'), {
+        code: 'ENOENT',
+        errno: -2,
+      })
+      setImmediate(() => child.emit('error', err))
+      return child
+    })
+    failingSpawn.calls = []
+    const deps = makeDeps({ spawn: failingSpawn })
+    const code = await runUpdate({ yes: true }, deps)
+    // Anything except 2 is acceptable for non-permission spawn failures; the
+    // important contract is that 2 is reserved for EACCES.
+    expect(code).not.toBe(2)
+    expect(code).toBe(1)
   })
 
   it('spawn non-zero exit → propagate exit code', async () => {

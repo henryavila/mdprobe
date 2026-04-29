@@ -198,7 +198,7 @@ export async function runUpdate(opts = {}, deps = {}) {
   // 8. Singleton handling.
   const singletonResult = await handleSingleton({
     force,
-    yes,
+    isTTY,
     confirm,
     isCancel,
     readLockFile,
@@ -206,11 +206,9 @@ export async function runUpdate(opts = {}, deps = {}) {
     isProcessAlive,
     lockPath,
     stdout,
-    stderr,
     sleep,
   })
   if (singletonResult === 'aborted') {
-    writeln(stdout, "Run 'mdprobe stop' first or pass --force.")
     tel.log('cancelled', { stage: 'singleton' })
     return 0
   }
@@ -226,7 +224,7 @@ export async function runUpdate(opts = {}, deps = {}) {
   })
   if (installResult.exitCode !== 0) {
     if (installResult.permissionDenied) {
-      printPermissionError(stdout, currentVersion)
+      printPermissionError(stdout, pm, currentVersion)
       tel.log('error', { stage: 'install', reason: 'eacces' })
       return 2
     }
@@ -268,6 +266,7 @@ export async function runUpdate(opts = {}, deps = {}) {
   writeln(stdout, '')
   writeln(stdout, 'Start with: mdprobe')
 
+  tel.log('success', { version: latestVersion })
   return 0
 }
 
@@ -301,11 +300,17 @@ async function fetchLatestVersion(fetchImpl) {
 /**
  * Handle a possibly-running singleton server.
  *
+ * Per spec §5 step 7:
+ *   - --force: kill unconditionally (no prompt).
+ *   - otherwise + TTY: prompt the user; --yes does NOT skip this prompt
+ *     (only --force does). User declines/cancels → abort.
+ *   - otherwise + no TTY: abort with a hint suggesting --force (CI scenario).
+ *
  * @returns {Promise<'aborted'|'proceed'>}
  */
 async function handleSingleton({
   force,
-  yes,
+  isTTY,
   confirm,
   isCancel,
   readLockFile,
@@ -313,7 +318,6 @@ async function handleSingleton({
   isProcessAlive,
   lockPath,
   stdout,
-  stderr,
   sleep,
 }) {
   let lock
@@ -332,9 +336,9 @@ async function handleSingleton({
   }
 
   if (!force) {
-    // Skip prompt when --yes was given AND we're proceeding (yes alone is not
-    // enough to silently kill the singleton — that's --force territory).
-    if (yes) {
+    if (!isTTY) {
+      // Non-interactive: can't prompt and --yes alone doesn't grant kill
+      // permission. Abort with an actionable hint about --force.
       writeln(stdout,
         `Server is running on port ${lock.port} (PID ${lock.pid}).`)
       writeln(stdout,
@@ -346,6 +350,7 @@ async function handleSingleton({
       initialValue: true,
     })
     if (isCancel(ok) || !ok) {
+      writeln(stdout, "Run 'mdprobe stop' first or pass --force.")
       return 'aborted'
     }
   }
@@ -402,9 +407,13 @@ function runInstall({ spawn, pm, pkgName, env, stdout, stderr }) {
       })
     }
     child.on('error', (err) => {
+      // Don't propagate spawn's errno (e.g. ENOENT → 2) because exit code 2
+      // is reserved for EACCES per spec. Always return 1 here; if the error
+      // is actually EACCES, `permissionDenied` is set and runUpdate maps it
+      // to exit code 2 explicitly.
       const permissionDenied = isPermissionDeniedError(err, stderrBuf)
       resolvePromise({
-        exitCode: typeof err?.errno === 'number' ? Math.abs(err.errno) : 1,
+        exitCode: 1,
         permissionDenied,
       })
     })
@@ -483,14 +492,16 @@ function escapeForRegex(s) {
 }
 
 /**
- * Print the EACCES three-option message verbatim.
+ * Print the EACCES three-option message. The sudo command is rendered using
+ * the actual detected package manager so pnpm/yarn/bun users get a correct
+ * suggestion.
  */
-function printPermissionError(stdout, currentVersion) {
+function printPermissionError(stdout, pm, currentVersion) {
   writeln(stdout, '')
   writeln(stdout, '× Permission denied installing globally.')
   writeln(stdout, '')
   writeln(stdout, 'Your global node_modules is system-owned. Options:')
-  writeln(stdout, `  1. Re-run with sudo:    sudo npm i -g ${PKG_NAME}`)
+  writeln(stdout, `  1. Re-run with sudo:    sudo ${pm} i -g ${PKG_NAME}`)
   writeln(stdout, `  2. Switch to nvm/fnm:   ${NVM_URL}`)
   writeln(stdout, '  3. Configure npm prefix: npm config set prefix ~/.npm-global')
   writeln(stdout, '')
