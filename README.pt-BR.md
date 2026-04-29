@@ -1,40 +1,42 @@
-![mdProbe](header.png)
+<p align="center">
+  <img src="header.png" alt="mdProbe" />
+</p>
 
 # mdProbe
+
+[![npm](https://img.shields.io/npm/v/@henryavila/mdprobe)](https://www.npmjs.com/package/@henryavila/mdprobe)
+[![license](https://img.shields.io/npm/l/@henryavila/mdprobe)](LICENSE)
 
 Visualizador e revisor de markdown com live reload, anotações persistentes e integração com agentes de IA.
 
 [🇺🇸 Read in English](README.md)
 
-Abra arquivos `.md` no browser, anote inline, aprove seções e exporte feedback estruturado em YAML — tudo pelo terminal.
+Abra arquivos `.md` no browser, anote inline, aprove seções e exporte feedback estruturado em YAML — tudo pelo terminal. Funciona de forma standalone ou como servidor MCP para agentes de IA (Claude Code, Cursor, etc.).
 
 ---
 
 ## O que o mdProbe é
 
-- Uma **ferramenta CLI** que renderiza markdown no browser com live reload
+- Uma **ferramenta CLI** que renderiza Markdown no browser com live reload
 - Um **sistema de anotações** onde você seleciona texto e adiciona comentários com tags (bug, question, suggestion, nitpick)
 - Um **workflow de revisão** com aprovação por seção (aprovar/rejeitar por heading)
-- Um **servidor MCP** que permite agentes de IA (Claude Code, Cursor, etc.) abrir arquivos, ler anotações e resolver feedback programaticamente
+- Um **servidor MCP** que permite agentes de IA abrir arquivos, ler anotações e resolver feedback programaticamente
 
 ## O que o mdProbe não é
 
-- Não é um editor de markdown — você edita no seu editor, o mdprobe renderiza e anota
+- Não é um editor de markdown — você edita no seu próprio editor, o mdProbe renderiza e anota
 - Não é um gerador de sites estáticos — ele roda um servidor local para preview ao vivo
 - Não é exclusivo para IA — funciona perfeitamente como ferramenta standalone de revisão
 
 ---
 
-## Instalação
+## Início Rápido
 
 ```bash
 npm install -g @henryavila/mdprobe
 mdprobe setup
+mdprobe README.md
 ```
-
-O wizard de setup configura seu nome de autor, instala a skill de IA nas IDEs detectadas (Claude Code, Cursor, Gemini), registra o servidor MCP (Claude Code e Cursor quando as pastas de config existem) e migra hooks antigos do Claude se necessário.
-
-Para ambientes não-interativos: `mdprobe setup --yes --author "Seu Nome"`
 
 Ou execute sem instalar:
 
@@ -42,75 +44,70 @@ Ou execute sem instalar:
 npx @henryavila/mdprobe README.md
 ```
 
-**Requisitos:** Node.js 20+, um browser.
+**Requisitos:** Node.js 20+, um browser moderno (veja [Requisitos de Browser](#requisitos-de-browser)).
 
 ---
 
-## Início Rápido
+## Anotações 101
 
-### Visualizar e editar
-
-```bash
-mdprobe README.md
-```
-
-Abre o markdown renderizado no browser. Edite o arquivo fonte — o browser atualiza instantaneamente via WebSocket.
-
-```bash
-mdprobe docs/
-```
-
-Descobre todos os `.md` recursivamente e mostra um seletor de arquivos.
-
-### Anotar
-
-Selecione qualquer texto no browser → escolha uma tag → escreva um comentário → salve.
+Selecione qualquer texto no browser, escolha uma tag, escreva um comentário e salve.
 
 | Tag | Significado |
 |-----|-------------|
 | `bug` | Algo está errado |
 | `question` | Precisa de esclarecimento |
 | `suggestion` | Ideia de melhoria |
-| `nitpick` | Detalhe menor de estilo/texto |
+| `nitpick` | Estilo ou redação menor |
 
-Anotações são armazenadas em arquivos sidecar `.annotations.yaml` — legíveis por humanos, amigáveis para git.
+### Estados da anotação
+
+| Estado | Significado |
+|--------|-------------|
+| `open` | Anotação ativa, ancorada com confiança |
+| `drifted` | O texto fonte mudou; a anotação foi relocalizada com correspondência aproximada, mas requer confirmação humana (exibida com sublinhado tracejado âmbar) |
+| `orphan` | A ancoragem falhou completamente após todas as etapas de recuperação; exibida em uma seção do painel lateral sem destaque inline |
+| `resolved` | Resolvida; aparece em cinza |
+
+As anotações são armazenadas em arquivos sidecar `.annotations.yaml` — legíveis por humanos, amigáveis ao git. Veja [docs/SCHEMA.md](docs/SCHEMA.md) para a referência completa do schema.
 
 ---
 
-## Servidor Singleton
+## Workflows
 
-O mdProbe roda uma **única instância do servidor**. Múltiplas invocações compartilham o mesmo servidor ao invés de iniciar duplicatas:
+### 5.1. Preview ao vivo standalone (foreground)
 
 ```bash
-mdprobe README.md          # Inicia servidor na porta 3000, abre browser
-mdprobe CHANGELOG.md       # Detecta servidor rodando, adiciona arquivo, abre browser, sai
+mdprobe README.md      # Abre um único arquivo
+mdprobe docs/          # Descobre todos os arquivos .md recursivamente
 ```
 
-A segunda invocação adiciona seus arquivos ao servidor existente e sai imediatamente. O browser mostra todos os arquivos na sidebar.
+Inicia um servidor, abre o browser e observa o arquivo fonte por mudanças. Edite no seu editor — o browser atualiza instantaneamente. Pressione `Ctrl+C` para parar.
 
-**Como funciona:** Um lock file em `/tmp/mdprobe.lock` registra o PID, porta e URL do servidor rodando. Novas invocações leem o lock file, verificam se o servidor está vivo via health check HTTP, e entram via `POST /api/add-files`. Ao desligar (`Ctrl+C`), o lock file é removido automaticamente.
+Múltiplas chamadas compartilham o mesmo servidor em execução: uma segunda invocação do `mdprobe` detecta o processo existente via lock file, adiciona seus arquivos via `POST /api/add-files` e encerra — assim você nunca acumula processos obsoletos.
 
-**Recuperação de lock stale:** Se uma instância anterior crashou, a próxima invocação detecta o processo morto e inicia normalmente.
+### 5.2. Servidor em background (`-d` / `--detach`)
 
----
+```bash
+mdprobe -d docs/            # Inicia em background e encerra imediatamente
+mdprobe CHANGELOG.md        # Entra no servidor em execução e adiciona o arquivo
+mdprobe stop                # Mata o servidor e limpa o lock file
+```
 
-## Dois Workflows de Revisão
+`-d`/`--detach` inicia o processo do servidor desanexado do terminal. Invocações subsequentes entram nele normalmente. Use `mdprobe stop` (ou `mdprobe stop --force`) para encerrá-lo.
 
-O mdProbe suporta dois workflows de revisão distintos para contextos diferentes:
-
-### 1. Revisão bloqueante (`--once`) — para CI/CD e scripts
+### 5.3. Revisão bloqueante para CI (`--once`)
 
 ```bash
 mdprobe spec.md --once
 ```
 
-Bloqueia o processo até você clicar **"Finish Review"** na UI. Ao finalizar, as anotações são salvas em `spec.annotations.yaml` e o processo sai com a lista de arquivos criados. Útil para pipelines que precisam de aprovação humana antes de continuar.
+![Sessão de revisão com --once](mdprobe-once-review.png)
 
-O modo `--once` sempre cria uma **instância isolada** — não participa do singleton. Isso garante que sessões de revisão tenham ciclo de vida independente.
+Bloqueia o processo até que você clique em **"Finish Review"** na interface. Encerra com a lista dos arquivos de anotação criados — útil para pipelines que precisam de aprovação humana antes de continuar. `--once` sempre cria uma instância de servidor isolada (não entra no singleton).
 
-### 2. Revisão assistida por IA (MCP) — para agentes de código
+### 5.4. Revisão assistida por IA (MCP)
 
-Ao trabalhar com agentes de IA (Claude Code, Cursor, etc.), o workflow é diferente. O agente **não usa `--once`**. Em vez disso:
+Ao trabalhar com agentes de IA, o agente usa as ferramentas MCP em vez de `--once`:
 
 ```
 Agente escreve spec.md
@@ -119,20 +116,20 @@ Agente chama mdprobe_view → browser abre, servidor continua rodando
     ↓
 Humano lê, anota, aprova/rejeita seções
     ↓
-Humano diz ao agente via chat: "terminei de revisar"
+Humano diz ao agente pelo chat: "done reviewing"
     ↓
 Agente chama mdprobe_annotations → lê todo o feedback
     ↓
 Agente corrige bugs, responde perguntas, avalia sugestões
     ↓
-Agente reporta mudanças, pede confirmação
+Agente relata as mudanças e pede confirmação ao humano
     ↓
-Agente chama mdprobe_update → resolve anotações
+Agente chama mdprobe_update → resolve as anotações
     ↓
-Humano vê itens resolvidos em tempo real (esmaecidos)
+Humano vê os itens resolvidos em tempo real (em cinza)
 ```
 
-O servidor continua rodando durante toda a conversa. O agente lê anotações sob demanda — sem bloqueio, sem sair do processo. Múltiplos arquivos podem ser revisados na mesma sessão via servidor singleton.
+O servidor permanece ativo durante toda a conversa. Múltiplos arquivos podem ser revisados na mesma sessão.
 
 ---
 
@@ -140,19 +137,38 @@ O servidor continua rodando durante toda a conversa. O agente lê anotações so
 
 ### Renderização
 
-Tabelas GFM, syntax highlighting (highlight.js), diagramas Mermaid, math/LaTeX (KaTeX), frontmatter YAML/TOML, HTML raw, imagens do diretório fonte.
+Tabelas GFM, realce de sintaxe (highlight.js), diagramas Mermaid, math/LaTeX (KaTeX), frontmatter YAML/TOML, passagem de HTML bruto, imagens do diretório fonte.
 
 ### Live Reload
 
-Mudanças detectadas via chokidar, enviadas por WebSocket. Debounce de 100ms. Posição de scroll preservada.
+Mudanças nos arquivos detectadas via chokidar, enviadas por WebSocket. Debounced em 100ms. Posição de scroll preservada.
 
-### Aprovação de Seções
+### Aprovação por Seção
 
-Cada heading ganha botões de aprovar/rejeitar. Aprovar um pai cascateia para todos os filhos. Barra de progresso mostra seções revisadas vs total.
+Cada heading recebe botões de aprovar/rejeitar. Aprovar um heading pai se propaga para todos os filhos. Barra de progresso acompanha as seções revisadas versus o total.
 
-### Detecção de Drift
+### Recuperação de Drift
 
-Banner de aviso quando o arquivo fonte muda após as anotações terem sido criadas.
+Quando o arquivo fonte muda após as anotações serem criadas, o mdProbe executa um pipeline de 5 etapas para relocalizar cada span de anotação:
+
+![Banner de drift após mudança no arquivo](mdprobe-drift-banner-fixed.png)
+
+```
+1. Hash check   — arquivo inalterado? usa offsets armazenados diretamente (~0ms)
+2. Exact match  — texto da citação ainda aparece de forma única no fonte
+3. Fuzzy match  — Myers bit-parallel, limiar ≥ 0.60 dentro de janela de ±2 kB
+4. Tree path    — fingerprint de heading + parágrafo via mdast
+5. Keyword dist — âncoras de palavras raras como último recurso
+→ confident / drifted / orphan
+```
+
+Anotações `drifted` exibem sublinhado tracejado âmbar e requerem sua confirmação explícita (`acceptDrift`) antes de serem reancorádas como `open`. Anotações `orphan` aparecem em uma seção dedicada do painel sem destaque inline.
+
+<!-- TODO: screenshot of drifted state (dashed amber underline) -->
+
+### Destaque com Precisão de Caractere
+
+A v0.5.0 usa a **CSS Custom Highlight API** (zero mutação de DOM) para renderizar marcas de anotação. As seleções são ancoradas por offsets de caractere UTF-16 no fonte Markdown bruto, não por números de linha/coluna — portanto seleções entre blocos, código reformatado e edições de quebra de parágrafo não quebram as âncoras silenciosamente.
 
 ### Temas
 
@@ -162,29 +178,73 @@ Cinco temas baseados no Catppuccin: Mocha (escuro, padrão), Macchiato, Frappe, 
 
 | Tecla | Ação |
 |-------|------|
-| `[` | Toggle painel esquerdo (arquivos + TOC) |
-| `]` | Toggle painel direito (anotações) |
-| `\` | Modo foco (esconde ambos os painéis) |
-| `j` / `k` | Próxima / anterior anotação |
+| `[` | Alternar painel esquerdo (arquivos + TOC) |
+| `]` | Alternar painel direito (anotações) |
+| `\` | Modo foco (ocultar ambos os painéis) |
+| `j` / `k` | Próxima / anotação anterior |
 | `?` | Overlay de ajuda |
 | `Ctrl+Enter` | Salvar anotação |
 
 ### Exportação
 
 ```bash
-mdprobe export spec.md --report   # Relatório de revisão em markdown
+mdprobe export spec.md --report   # Relatório de revisão em Markdown
 mdprobe export spec.md --inline   # Anotações inseridas no fonte
-mdprobe export spec.md --json     # JSON puro
-mdprobe export spec.md --sarif    # SARIF 2.1.0 (integração CI/CD)
+mdprobe export spec.md --json     # JSON simples (schema v2)
+mdprobe export spec.md --sarif    # SARIF 2.1.0 (integração com CI/CD)
+```
+
+---
+
+## Requisitos de Browser
+
+A v0.5.0 requer a **CSS Custom Highlight API** para renderização inline de anotações.
+
+| Browser | Versão mínima |
+|---------|---------------|
+| Chrome / Edge | 105+ |
+| Firefox | 140+ |
+| Safari | 17.2+ |
+
+Em browsers mais antigos o mdProbe exibe um modal explicando a limitação e recorre a uma lista de anotações somente leitura. Os destaques inline ficam desabilitados.
+
+---
+
+## Referência da CLI
+
+```
+mdprobe [files...] [options]
+
+Options:
+  --port <n>         Número da porta (padrão: 3000, incrementa automaticamente se ocupada)
+  --once             Revisão bloqueante — servidor isolado, encerra ao clicar "Finish Review"
+  -d, --detach       Inicia o servidor em background e encerra
+  --no-open          Não abre o browser automaticamente
+  --help, -h         Exibe a ajuda
+  --version, -v      Exibe a versão
+
+Subcommands:
+  setup                         Configuração interativa (skill + MCP + hook)
+  setup --remove                Remove tudo
+  setup --yes [--author <name>] Configuração não-interativa
+  mcp                           Inicia o servidor MCP (stdio, para agentes de IA)
+  config [key] [value]          Gerencia configuração
+  export <path> [flags]         Exporta anotações (--report, --inline, --json, --sarif)
+  migrate <path> [--dry-run]    Migra em lote anotações v1 para v2
+  stop [--force]                Mata o servidor singleton e limpa o lock file
 ```
 
 ---
 
 ## Integração com Agentes de IA
 
-O mdProbe inclui um servidor MCP (Model Context Protocol) e um arquivo de skill (`SKILL.md`) que ensina agentes de IA a usar o workflow de revisão. Isso habilita um loop bidirecional: o agente escreve markdown, o humano anota, o agente lê o feedback e resolve.
+<p align="center">
+  <img src="mdprobe-complex-full.png" alt="mdProbe com painel de anotações aberto" />
+</p>
 
-### Setup
+O mdProbe inclui um servidor MCP e um `SKILL.md` que ensina agentes de IA o workflow de revisão. Isso viabiliza um ciclo bidirecional: o agente escreve Markdown, o humano anota, o agente lê o feedback e o resolve.
+
+### Configuração
 
 ```bash
 mdprobe setup
@@ -192,29 +252,25 @@ mdprobe setup
 
 Wizard interativo que:
 1. Instala o `SKILL.md` nas IDEs detectadas (Claude Code, Cursor, Gemini)
-2. Registra o servidor MCP (`mdprobe mcp`) no Claude Code (`~/.claude.json` ou `claude mcp`) e no Cursor (`~/.cursor/mcp.json`, se essa pasta existir)
-3. Migra hooks PostToolUse antigos do Claude de versões anteriores do mdprobe (se houver)
+2. Registra o servidor MCP (`mdprobe mcp`) no Claude Code (`~/.claude.json` ou `claude mcp`) e no Cursor (`~/.cursor/mcp.json` quando essa pasta existir)
+3. Migra hooks legados Claude PostToolUse de versões anteriores do mdprobe (se houver)
 4. Configura seu nome de autor
 
-Não-interativo: `mdprobe setup --yes --author "Seu Nome"`
+Não-interativo: `mdprobe setup --yes --author "Seu Nome"`  
 Remover tudo: `mdprobe setup --remove`
 
 ### Ferramentas MCP
 
-Após o setup, agentes de IA podem chamar estas ferramentas:
-
 | Ferramenta | Propósito |
 |------------|-----------|
-| `mdprobe_view` | Abrir `.md` no browser |
-| `mdprobe_annotations` | Ler anotações e status das seções |
-| `mdprobe_update` | Resolver, responder, adicionar ou deletar anotações |
-| `mdprobe_status` | Verificar se o servidor está rodando |
+| `mdprobe_view` | Abre arquivos `.md` no browser |
+| `mdprobe_annotations` | Lê anotações e status de seções |
+| `mdprobe_update` | Resolve, responde, adiciona ou exclui anotações |
+| `mdprobe_status` | Verifica se o servidor está em execução |
 
-O servidor MCP participa do singleton — se um servidor iniciado via CLI já estiver rodando, o agente o reutiliza.
+### Registro MCP Manual
 
-### Registro Manual do MCP
-
-Se preferir não usar `mdprobe setup`:
+Se preferir não usar o `mdprobe setup`:
 
 **Claude Code**
 
@@ -222,7 +278,7 @@ Se preferir não usar `mdprobe setup`:
 claude mcp add --scope user --transport stdio mdprobe -- mdprobe mcp
 ```
 
-**Cursor** — mescle em `~/.cursor/mcp.json` (ou `.cursor/mcp.json` no projeto):
+**Cursor** — mescle em `~/.cursor/mcp.json` (ou no `.cursor/mcp.json` do projeto):
 
 ```json
 {
@@ -232,135 +288,37 @@ claude mcp add --scope user --transport stdio mdprobe -- mdprobe mcp
 }
 ```
 
-**WSL + Cursor no Windows:** o `HOME` do Node no Linux é o seu home Linux (ex.: `/home/voce`), enquanto o **Cursor no Windows** lê o MCP em `%USERPROFILE%\\.cursor\\mcp.json`. Ao rodar `mdprobe setup` **no WSL**, o setup grava **os dois**: `~/.cursor/mcp.json` no Linux e, em `/mnt/c/...`, o `mcp.json` do Windows com `wsl.exe` apontando para o binário Linux do `mdprobe` — sem editar na mão. Exige `WSL_DISTRO_NAME` e `cmd.exe` (instalação WSL2 normal).
+**WSL + Cursor no Windows:** O home do Node é seu home Linux (ex.: `/home/você`), enquanto o Cursor desktop lê o MCP do perfil Windows (`%USERPROFILE%\.cursor\mcp.json`). Ao executar `mdprobe setup` dentro do WSL, ele grava tanto o `~/.cursor/mcp.json` (Linux) quanto, via `/mnt/c/...`, o `mcp.json` do Windows com uma ponte `wsl.exe` para o binário `mdprobe` do Linux. `WSL_DISTRO_NAME` e `cmd.exe` precisam estar disponíveis (instalação normal do WSL2).
 
 ---
 
-## Referência CLI
+## Migração v0.4 → v0.5
 
+O schema v1 usava `selectors.position { startLine, startColumn, endLine, endColumn }`. A v0.5.0 substitui isso por `range { start, end }` (offsets de caractere UTF-16), que é mais preciso e sobrevive a edições de quebra de linha.
+
+**Automática:** `AnnotationFile.load()` detecta arquivos v1 e os migra no local, gravando primeiro um backup `.bak` (ex.: `spec.annotations.yaml.bak`).
+
+**Em lote (recomendado antes de atualizar um repositório grande):**
+
+```bash
+mdprobe migrate docs/ --dry-run   # Visualiza as mudanças sem gravar
+mdprobe migrate docs/             # Aplica a migração
 ```
-mdprobe [arquivos...] [opções]
 
-Opções:
-  --port <n>      Porta (padrão: 3000, auto-incrementa se ocupada)
-  --once          Revisão bloqueante — servidor isolado, sai ao "Finish Review"
-  --no-open       Não abrir browser automaticamente
-  --help, -h      Mostrar ajuda
-  --version, -v   Mostrar versão
+**Rollback:** restaure o arquivo `.bak` ao lado do arquivo `.annotations.yaml`.
 
-Subcomandos:
-  setup                  Setup interativo (skill + MCP + hook)
-  setup --remove         Desinstalar tudo
-  setup --yes [--author] Setup não-interativo
-  mcp                    Iniciar servidor MCP (stdio, para agentes de IA)
-  config [key] [value]   Gerenciar configuração
-  export <path> [flags]  Exportar anotações (--report, --inline, --json, --sarif)
-```
+Veja [docs/SCHEMA.md](docs/SCHEMA.md) para a referência completa dos campos v2.
 
 ---
 
-## API como Biblioteca
+## Biblioteca & HTTP API
 
-### Embutir no seu próprio servidor
+O mdProbe é distribuído como um pacote npm que você pode embutir no seu próprio servidor — sem processo separado.
 
-```javascript
-import { createHandler } from '@henryavila/mdprobe'
-
-const handler = createHandler({
-  resolveFile: (req) => '/path/to/file.md',
-  listFiles: () => [
-    { id: 'spec', path: '/docs/spec.md', label: 'Especificação' },
-  ],
-  basePath: '/review',
-  author: 'Review Bot',
-  onComplete: (result) => {
-    console.log(`Revisão concluída: ${result.annotations} anotações`)
-  },
-})
-
-import http from 'node:http'
-http.createServer(handler).listen(3000)
-```
-
-### Trabalhando com anotações programaticamente
-
-```javascript
-import { AnnotationFile } from '@henryavila/mdprobe/annotations'
-
-const af = await AnnotationFile.load('spec.annotations.yaml')
-
-// Consultar
-const open = af.getOpen()
-const bugs = af.getByTag('bug')
-
-// Modificar
-af.add({
-  selectors: {
-    position: { startLine: 10, startColumn: 1, endLine: 10, endColumn: 40 },
-    quote: { exact: 'texto selecionado', prefix: '', suffix: '' },
-  },
-  comment: 'Isso precisa de esclarecimento',
-  tag: 'question',
-  author: 'Henry',
-})
-af.resolve(bugs[0].id)
-await af.save('spec.annotations.yaml')
-
-// Exportar
-import { exportJSON, exportSARIF } from '@henryavila/mdprobe/export'
-const sarif = exportSARIF(af, 'spec.md')
-```
-
----
-
-## Schema de Anotações
-
-Formato do arquivo sidecar (`<arquivo>.annotations.yaml`):
-
-```yaml
-version: 1
-source: spec.md
-source_hash: "sha256:abc123..."
-sections:
-  - heading: Introdução
-    level: 2
-    status: approved
-annotations:
-  - id: "a1b2c3d4"
-    selectors:
-      position: { startLine: 15, startColumn: 1, endLine: 15, endColumn: 42 }
-      quote: { exact: "O sistema deve suportar usuários concorrentes" }
-    comment: "Quantos usuários concorrentes?"
-    tag: question
-    status: open
-    author: Henry
-    created_at: "2026-04-08T10:30:00.000Z"
-    replies:
-      - author: Agente
-        comment: "Meta é 500 concorrentes."
-        created_at: "2026-04-08T11:00:00.000Z"
-```
-
-JSON Schema disponível em `@henryavila/mdprobe/schema.json`.
-
----
-
-## API HTTP
-
-Disponível quando o servidor está rodando:
-
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| `GET` | `/api/files` | Listar arquivos markdown |
-| `GET` | `/api/file?path=<arquivo>` | HTML renderizado + TOC + frontmatter |
-| `GET` | `/api/annotations?path=<arquivo>` | Anotações + seções + status de drift |
-| `POST` | `/api/annotations` | Criar/atualizar/deletar anotações |
-| `POST` | `/api/sections` | Aprovar/rejeitar/resetar seções |
-| `GET` | `/api/export?path=<arquivo>&format=<fmt>` | Exportar (json, report, inline, sarif) |
-| `GET` | `/api/status` | Identidade do servidor, PID, porta, lista de arquivos |
-| `POST` | `/api/add-files` | Adicionar arquivos a servidor rodando (singleton join) |
-
-WebSocket em `/ws` para atualizações em tempo real.
+- **[docs/EMBEDDING.md](docs/EMBEDDING.md)** — `createHandler` (middleware Express/Node), classe `AnnotationFile`, helpers de exportação, utilitários de ancoragem
+- **[docs/HTTP-API.md](docs/HTTP-API.md)** — referência completa de endpoints REST + WebSocket
+- **[docs/SCHEMA.md](docs/SCHEMA.md)** — schema YAML de anotações v2, referência campo a campo
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — estrutura do projeto, pipeline de renderização, principais decisões de design
 
 ---
 
@@ -374,32 +332,7 @@ npm run build:ui
 npm test
 ```
 
-### Estrutura do Projeto
-
-```
-bin/cli.js              Entry point da CLI
-src/
-  server.js             Servidor HTTP + WebSocket
-  singleton.js          Lock file + coordenação singleton cross-process
-  mcp.js                Servidor MCP (4 tools, transporte stdio)
-  renderer.js           Markdown → HTML (unified/remark/rehype)
-  annotations.js        CRUD de anotações + aprovação de seções
-  export.js             Exportação: report, inline, JSON, SARIF
-  setup.js              Registro de skill + MCP + hook nas IDEs
-  setup-ui.js           Wizard interativo de setup
-  handler.js            API de biblioteca para embedding
-  config.js             Config do usuário (~/.mdprobe.json)
-  open-browser.js       Abertura de browser cross-platform
-  hash.js               Detecção de drift via SHA-256
-  anchoring.js          Matching de posição de texto
-  ui/
-    components/         Componentes Preact
-    hooks/              WebSocket, keyboard, tema, anotações
-    state/store.js      Estado via Preact Signals
-    styles/themes.css   Temas Catppuccin
-schema.json             JSON Schema para YAML de anotações
-skills/mdprobe/         Skill para agentes de IA (SKILL.md)
-```
+Para estrutura do projeto e detalhes de arquitetura veja [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
