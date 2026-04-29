@@ -1,0 +1,602 @@
+schema_version: 2
+annotations:
+  - id: ann-0
+    author: test
+    tag: question
+    status: open
+    comment: c0
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 0, end: 7 }
+    quote: { exact: 'alpha-0', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-1
+    author: test
+    tag: bug
+    status: open
+    comment: c1
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 10, end: 17 }
+    quote: { exact: 'alpha-1', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-2
+    author: test
+    tag: suggestion
+    status: open
+    comment: c2
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 20, end: 27 }
+    quote: { exact: 'alpha-2', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-3
+    author: test
+    tag: nitpick
+    status: open
+    comment: c3
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 30, end: 37 }
+    quote: { exact: 'alpha-3', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-4
+    author: test
+    tag: question
+    status: open
+    comment: c4
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 40, end: 47 }
+    quote: { exact: 'alpha-4', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-5
+    author: test
+    tag: bug
+    status: open
+    comment: c5
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 50, end: 57 }
+    quote: { exact: 'alpha-5', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-6
+    author: test
+    tag: suggestion
+    status: open
+    comment: c6
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 60, end: 67 }
+    quote: { exact: 'alpha-6', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-7
+    author: test
+    tag: nitpick
+    status: open
+    comment: c7
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 70, end: 77 }
+    quote: { exact: 'alpha-7', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-8
+    author: test
+    tag: question
+    status: open
+    comment: c8
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 80, end: 87 }
+    quote: { exact: 'alpha-8', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-9
+    author: test
+    tag: bug
+    status: open
+    comment: c9
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 90, end: 97 }
+    quote: { exact: 'alpha-9', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-10
+    author: test
+    tag: suggestion
+    status: open
+    comment: c10
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 100, end: 107 }
+    quote: { exact: 'alpha-10', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-11
+    author: test
+    tag: nitpick
+    status: open
+    comment: c11
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 110, end: 117 }
+    quote: { exact: 'alpha-11', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-12
+    author: test
+    tag: question
+    status: open
+    comment: c12
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 120, end: 127 }
+    quote: { exact: 'alpha-12', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-13
+    author: test
+    tag: bug
+    status: open
+    comment: c13
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 130, end: 137 }
+    quote: { exact: 'alpha-13', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-14
+    author: test
+    tag: suggestion
+    status: open
+    comment: c14
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 140, end: 147 }
+    quote: { exact: 'alpha-14', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-15
+    author: test
+    tag: nitpick
+    status: open
+    comment: c15
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 150, end: 157 }
+    quote: { exact: 'alpha-15', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-16
+    author: test
+    tag: question
+    status: open
+    comment: c16
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 160, end: 167 }
+    quote: { exact: 'alpha-16', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-17
+    author: test
+    tag: bug
+    status: open
+    comment: c17
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 170, end: 177 }
+    quote: { exact: 'alpha-17', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-18
+    author: test
+    tag: suggestion
+    status: open
+    comment: c18
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 180, end: 187 }
+    quote: { exact: 'alpha-18', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-19
+    author: test
+    tag: nitpick
+    status: open
+    comment: c19
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 190, end: 197 }
+    quote: { exact: 'alpha-19', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-20
+    author: test
+    tag: question
+    status: open
+    comment: c20
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 200, end: 207 }
+    quote: { exact: 'alpha-20', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-21
+    author: test
+    tag: bug
+    status: open
+    comment: c21
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 210, end: 217 }
+    quote: { exact: 'alpha-21', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-22
+    author: test
+    tag: suggestion
+    status: open
+    comment: c22
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 220, end: 227 }
+    quote: { exact: 'alpha-22', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-23
+    author: test
+    tag: nitpick
+    status: open
+    comment: c23
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 230, end: 237 }
+    quote: { exact: 'alpha-23', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-24
+    author: test
+    tag: question
+    status: open
+    comment: c24
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 240, end: 247 }
+    quote: { exact: 'alpha-24', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-25
+    author: test
+    tag: bug
+    status: open
+    comment: c25
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 250, end: 257 }
+    quote: { exact: 'alpha-25', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-26
+    author: test
+    tag: suggestion
+    status: open
+    comment: c26
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 260, end: 267 }
+    quote: { exact: 'alpha-26', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-27
+    author: test
+    tag: nitpick
+    status: open
+    comment: c27
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 270, end: 277 }
+    quote: { exact: 'alpha-27', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-28
+    author: test
+    tag: question
+    status: open
+    comment: c28
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 280, end: 287 }
+    quote: { exact: 'alpha-28', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-29
+    author: test
+    tag: bug
+    status: open
+    comment: c29
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 290, end: 297 }
+    quote: { exact: 'alpha-29', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-30
+    author: test
+    tag: suggestion
+    status: open
+    comment: c30
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 300, end: 307 }
+    quote: { exact: 'alpha-30', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-31
+    author: test
+    tag: nitpick
+    status: open
+    comment: c31
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 310, end: 317 }
+    quote: { exact: 'alpha-31', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-32
+    author: test
+    tag: question
+    status: open
+    comment: c32
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 320, end: 327 }
+    quote: { exact: 'alpha-32', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-33
+    author: test
+    tag: bug
+    status: open
+    comment: c33
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 330, end: 337 }
+    quote: { exact: 'alpha-33', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-34
+    author: test
+    tag: suggestion
+    status: open
+    comment: c34
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 340, end: 347 }
+    quote: { exact: 'alpha-34', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-35
+    author: test
+    tag: nitpick
+    status: open
+    comment: c35
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 350, end: 357 }
+    quote: { exact: 'alpha-35', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-36
+    author: test
+    tag: question
+    status: open
+    comment: c36
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 360, end: 367 }
+    quote: { exact: 'alpha-36', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-37
+    author: test
+    tag: bug
+    status: open
+    comment: c37
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 370, end: 377 }
+    quote: { exact: 'alpha-37', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-38
+    author: test
+    tag: suggestion
+    status: open
+    comment: c38
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 380, end: 387 }
+    quote: { exact: 'alpha-38', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-39
+    author: test
+    tag: nitpick
+    status: open
+    comment: c39
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 390, end: 397 }
+    quote: { exact: 'alpha-39', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-40
+    author: test
+    tag: question
+    status: open
+    comment: c40
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 400, end: 407 }
+    quote: { exact: 'alpha-40', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-41
+    author: test
+    tag: bug
+    status: open
+    comment: c41
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 410, end: 417 }
+    quote: { exact: 'alpha-41', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-42
+    author: test
+    tag: suggestion
+    status: open
+    comment: c42
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 420, end: 427 }
+    quote: { exact: 'alpha-42', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-43
+    author: test
+    tag: nitpick
+    status: open
+    comment: c43
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 430, end: 437 }
+    quote: { exact: 'alpha-43', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-44
+    author: test
+    tag: question
+    status: open
+    comment: c44
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 440, end: 447 }
+    quote: { exact: 'alpha-44', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-45
+    author: test
+    tag: bug
+    status: open
+    comment: c45
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 450, end: 457 }
+    quote: { exact: 'alpha-45', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-46
+    author: test
+    tag: suggestion
+    status: open
+    comment: c46
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 460, end: 467 }
+    quote: { exact: 'alpha-46', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-47
+    author: test
+    tag: nitpick
+    status: open
+    comment: c47
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 470, end: 477 }
+    quote: { exact: 'alpha-47', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-48
+    author: test
+    tag: question
+    status: open
+    comment: c48
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 480, end: 487 }
+    quote: { exact: 'alpha-48', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-49
+    author: test
+    tag: bug
+    status: open
+    comment: c49
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 490, end: 497 }
+    quote: { exact: 'alpha-49', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-50
+    author: test
+    tag: suggestion
+    status: open
+    comment: c50
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 500, end: 507 }
+    quote: { exact: 'alpha-50', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-51
+    author: test
+    tag: nitpick
+    status: open
+    comment: c51
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 510, end: 517 }
+    quote: { exact: 'alpha-51', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-52
+    author: test
+    tag: question
+    status: open
+    comment: c52
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 520, end: 527 }
+    quote: { exact: 'alpha-52', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-53
+    author: test
+    tag: bug
+    status: open
+    comment: c53
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 530, end: 537 }
+    quote: { exact: 'alpha-53', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-54
+    author: test
+    tag: suggestion
+    status: open
+    comment: c54
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 540, end: 547 }
+    quote: { exact: 'alpha-54', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-55
+    author: test
+    tag: nitpick
+    status: open
+    comment: c55
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 550, end: 557 }
+    quote: { exact: 'alpha-55', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-56
+    author: test
+    tag: question
+    status: open
+    comment: c56
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 560, end: 567 }
+    quote: { exact: 'alpha-56', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-57
+    author: test
+    tag: bug
+    status: open
+    comment: c57
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 570, end: 577 }
+    quote: { exact: 'alpha-57', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-58
+    author: test
+    tag: suggestion
+    status: open
+    comment: c58
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 580, end: 587 }
+    quote: { exact: 'alpha-58', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
+  - id: ann-59
+    author: test
+    tag: nitpick
+    status: open
+    comment: c59
+    created_at: '2026-04-29T00:00:00Z'
+    range: { start: 590, end: 597 }
+    quote: { exact: 'alpha-59', prefix: 'word ', suffix: ' and' }
+    anchor:
+      contextHash: 'sha256:placeholder'
