@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { sha256 } from 'js-sha256'
 
 export function detectVersion(yamlObj) {
   return yamlObj?.schema_version ?? 1
@@ -17,8 +17,8 @@ export function sourceToOffset(source, line, column) {
   return source.length
 }
 
-function sha256(s) {
-  return 'sha256:' + createHash('sha256').update(s).digest('hex')
+function hashContext(s) {
+  return 'sha256:' + sha256(s)
 }
 
 export function transformV1ToV2Essential(yamlObj, source) {
@@ -30,7 +30,7 @@ export function transformV1ToV2Essential(yamlObj, source) {
     const quote = ann.selectors?.quote || { exact: '', prefix: '', suffix: '' }
     const start = pos ? sourceToOffset(source, pos.startLine, pos.startColumn) : 0
     const end = pos ? sourceToOffset(source, pos.endLine, pos.endColumn) : start
-    const contextHash = sha256(quote.prefix + quote.exact + quote.suffix)
+    const contextHash = hashContext(quote.prefix + quote.exact + quote.suffix)
 
     const transformed = { ...ann }
     delete transformed.selectors
@@ -45,5 +45,5 @@ export function transformV1ToV2Essential(yamlObj, source) {
 }
 
 export function computeContextHash(prefix, exact, suffix) {
-  return sha256(prefix + exact + suffix)
+  return hashContext(prefix + exact + suffix)
 }
