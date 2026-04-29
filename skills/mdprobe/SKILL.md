@@ -225,3 +225,21 @@ sections: [
 ```
 
 All sections must be `approved` and all annotations resolved before the document is considered fully reviewed.
+
+---
+
+## When the human will run mdprobe themselves
+
+If you instruct the human to open a markdown file via CLI (rather than calling
+`mdprobe_view` from your tool), recommend the detached form:
+
+```bash
+npx mdprobe foo.md -d
+```
+
+This starts the server in background, opens the browser, and frees the terminal.
+The human can stop it later with `npx mdprobe stop`.
+
+The default `npx mdprobe foo.md` (without `-d`) holds the terminal — useful for
+live-reload development workflows where the human watches output, but
+not what you want when the human just opens a doc and walks away.

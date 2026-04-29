@@ -57,13 +57,15 @@ describe('AnnotationFile.load()', () => {
     expect(file.sourceHash).toMatch(/^sha256:/)
   })
 
-  it('loads all annotation fields: selectors, comment, tag, status, author, timestamps', async () => {
+  it('loads all annotation fields: range, quote, comment, tag, status, author, timestamps', async () => {
     const file = await AnnotationFile.load(SAMPLE_YAML)
     const ann = file.getById('a1b2c3')
 
-    expect(ann.selectors).toBeDefined()
-    expect(ann.selectors.position.startLine).toBe(5)
-    expect(ann.selectors.quote.exact).toBe('O sistema valida todos os inputs do formulário')
+    expect(ann.range).toBeDefined()
+    expect(typeof ann.range.start).toBe('number')
+    expect(typeof ann.range.end).toBe('number')
+    expect(ann.quote).toBeDefined()
+    expect(ann.quote.exact).toBe('O sistema valida todos os inputs do formulário')
     expect(ann.comment).toBe('Quais inputs? Precisa especificar campos')
     expect(ann.tag).toBe('question')
     expect(ann.status).toBe('open')
@@ -333,6 +335,73 @@ describe('addReply()', () => {
     expect(() =>
       file.addReply('no-such-id', { author: 'Bob', comment: 'Orphan' })
     ).toThrow(/not found/i)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// reply id assignment
+// ---------------------------------------------------------------------------
+describe('reply id assignment', () => {
+  let file, id
+
+  beforeEach(() => {
+    file = AnnotationFile.create('spec.md', 'sha256:abc')
+    file.add({
+      selectors: { position: { startLine: 1 } },
+      comment: 'question',
+      tag: 'question',
+      author: 'Alice',
+    })
+    id = file.annotations[0].id
+  })
+
+  it('addReply assigns a uuid id', () => {
+    file.addReply(id, { author: 'Bob', comment: 'first' })
+
+    const ann = file.getById(id)
+    expect(ann.replies).toHaveLength(1)
+
+    const reply = ann.replies[0]
+    expect(reply.id).toBeDefined()
+    expect(typeof reply.id).toBe('string')
+    expect(reply.id).toMatch(/^[0-9a-f-]{36}$/)
+  })
+
+  it('loading replies without id backfills them', async () => {
+    // Create a temp file with a reply that has no id
+    const yamlContent = `version: 1
+source: test.md
+source_hash: sha256:test
+annotations:
+  - id: root-1
+    selectors:
+      position: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 3 }
+      quote: { exact: 'hi', prefix: '', suffix: '' }
+    comment: x
+    tag: question
+    author: me
+    status: open
+    created_at: 2026-01-01T00:00:00Z
+    updated_at: 2026-01-01T00:00:00Z
+    replies:
+      - author: other
+        comment: legacy
+        created_at: 2026-01-01T00:00:00Z
+`
+
+    // Write to a temp file
+    const tmpPath = node_path.join(tmpDir, 'legacy.annotations.yaml')
+    await node_fs.writeFile(tmpPath, yamlContent, 'utf-8')
+
+    // Load the file
+    const loadedFile = await AnnotationFile.load(tmpPath)
+
+    // Assert the reply has a backfilled id
+    const ann = loadedFile.getById('root-1')
+    expect(ann.replies).toHaveLength(1)
+    expect(ann.replies[0].id).toBeDefined()
+    expect(typeof ann.replies[0].id).toBe('string')
+    expect(ann.replies[0].id).toMatch(/^[0-9a-f-]{36}$/)
   })
 })
 
@@ -671,7 +740,11 @@ describe('toJSON()', () => {
   it('returns a JSON-serializable object with all top-level and annotation fields', () => {
     const file = AnnotationFile.create('spec.md', 'sha256:abc')
     file.add({
-      selectors: { position: { startLine: 5, endLine: 5 } },
+      selectors: {
+        range: { start: 5, end: 20 },
+        quote: { exact: 'some text', prefix: '', suffix: '' },
+        anchor: { contextHash: 'sha256:abc123' },
+      },
       comment: 'detailed note',
       tag: 'suggestion',
       author: 'Bob',
@@ -680,13 +753,15 @@ describe('toJSON()', () => {
     const json = file.toJSON()
 
     expect(json.version).toBe(1)
+    expect(json.schema_version).toBe(2)
     expect(json.source).toBe('spec.md')
     expect(json.source_hash).toBe('sha256:abc')
     expect(json.annotations).toHaveLength(1)
     expect(json.sections).toBeInstanceOf(Array)
 
     const ann = json.annotations[0]
-    for (const key of ['id', 'selectors', 'comment', 'tag', 'status', 'author', 'created_at', 'updated_at', 'replies']) {
+    // v2 format: range, quote, anchor at top level (normalized from selectors)
+    for (const key of ['id', 'comment', 'tag', 'status', 'author', 'created_at', 'updated_at', 'replies', 'range', 'quote', 'anchor']) {
       expect(ann).toHaveProperty(key)
     }
 

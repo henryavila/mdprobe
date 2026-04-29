@@ -1,40 +1,42 @@
-![mdProbe](header.png)
+<p align="center">
+  <img src="screenshot-hero.png" alt="mdProbe full interface with annotations and inline highlights" />
+</p>
 
 # mdProbe
+
+[![npm](https://img.shields.io/npm/v/@henryavila/mdprobe)](https://www.npmjs.com/package/@henryavila/mdprobe)
+[![license](https://img.shields.io/npm/l/@henryavila/mdprobe)](LICENSE)
 
 Markdown viewer and reviewer with live reload, persistent annotations, and AI agent integration.
 
 [🇧🇷 Leia em Português](README.pt-BR.md)
 
-Open `.md` files in the browser, annotate inline, approve sections, and export structured feedback as YAML — all from the terminal.
+Open `.md` files in the browser, annotate inline, approve sections, and export structured feedback as YAML — all from the terminal. Works standalone or as an MCP server for AI agents (Claude Code, Cursor, etc.).
 
 ---
 
 ## What mdProbe is
 
-- A **CLI tool** that renders markdown in the browser with live reload
+- A **CLI tool** that renders Markdown in the browser with live reload
 - An **annotation system** where you select text and add tagged comments (bug, question, suggestion, nitpick)
 - A **review workflow** with section-level approval (approve/reject per heading)
-- An **MCP server** that lets AI agents (Claude Code, Cursor, etc.) open files, read annotations, and resolve feedback programmatically
+- An **MCP server** that lets AI agents open files, read annotations, and resolve feedback programmatically
 
 ## What mdProbe is not
 
-- Not a markdown editor — you edit in your own editor, mdprobe renders and annotates
+- Not a Markdown editor — you edit in your own editor, mdProbe renders and annotates
 - Not a static site generator — it runs a local server for live preview
 - Not exclusive to AI — works perfectly as a standalone review tool
 
 ---
 
-## Install
+## Quick Start
 
 ```bash
 npm install -g @henryavila/mdprobe
 mdprobe setup
+mdprobe README.md
 ```
-
-The setup wizard configures your author name, installs the AI skill to detected IDEs (Claude Code, Cursor, Gemini), registers the MCP server (Claude Code and Cursor when their config folders exist), and migrates legacy Claude hooks if needed.
-
-For non-interactive environments: `mdprobe setup --yes --author "Your Name"`
 
 Or run without installing:
 
@@ -42,29 +44,15 @@ Or run without installing:
 npx @henryavila/mdprobe README.md
 ```
 
-**Requirements:** Node.js 20+, a browser.
+**Requirements:** Node.js 20+, a modern browser (see [Browser Requirements](#browser-requirements)).
 
 ---
 
-## Quick Start
+## Annotations 101
 
-### View and edit
+Select any text in the browser, choose a tag, write a comment, and save.
 
-```bash
-mdprobe README.md
-```
-
-Opens rendered markdown in the browser. Edit the source file — the browser updates instantly via WebSocket.
-
-```bash
-mdprobe docs/
-```
-
-Discovers all `.md` files recursively and shows a file picker.
-
-### Annotate
-
-Select any text in the browser → choose a tag → write a comment → save.
+![Cross-block annotation: highlight spans heading and first line of code block](screenshot-cross-block.png)
 
 | Tag | Meaning |
 |-----|---------|
@@ -73,44 +61,55 @@ Select any text in the browser → choose a tag → write a comment → save.
 | `suggestion` | Improvement idea |
 | `nitpick` | Minor style/wording |
 
-Annotations are stored in `.annotations.yaml` sidecar files — human-readable, git-friendly.
+### Annotation states
+
+| State | Meaning |
+|-------|---------|
+| `open` | Active annotation, anchored confidently |
+| `drifted` | Source text changed; annotation was re-located with fuzzy match but requires human confirmation (shown with dashed amber underline) |
+| `orphan` | Anchor failed completely after all recovery steps; surfaced in a side panel section without inline highlight |
+| `resolved` | Addressed; greyed out |
+
+Annotations are stored in `.annotations.yaml` sidecar files — human-readable, git-friendly. See [docs/SCHEMA.md](docs/SCHEMA.md) for the full schema reference.
 
 ---
 
-## Singleton Server
+## Workflows
 
-mdProbe runs a **single server instance**. Multiple invocations share the same server instead of starting duplicates:
+### 5.1. Standalone live preview (foreground)
 
 ```bash
-mdprobe README.md          # Starts server on port 3000, opens browser
-mdprobe CHANGELOG.md       # Detects running server, adds file, opens browser, exits
+mdprobe README.md      # Open a single file
+mdprobe docs/          # Discover all .md files recursively
 ```
 
-The second invocation adds its files to the existing server and exits immediately. The browser shows all files in the sidebar.
+Starts a server, opens the browser, and watches the source file for changes. Edit in your editor — the browser updates instantly. Press `Ctrl+C` to stop.
 
-**How it works:** A lock file at `/tmp/mdprobe.lock` records the running server's PID, port, and URL. New invocations read the lock file, verify the server is alive via HTTP health check, and join via `POST /api/add-files`. On shutdown (`Ctrl+C`), the lock file is removed automatically.
+Multiple calls share the same running server: a second `mdprobe` invocation detects the existing process via lock file, adds its files via `POST /api/add-files`, and exits — so you never accumulate stale processes.
 
-**Stale lock recovery:** If a previous instance crashed, the next invocation detects the dead process and starts fresh.
+### 5.2. Background server (`-d` / `--detach`)
 
----
+```bash
+mdprobe -d docs/            # Start in background, exit immediately
+mdprobe CHANGELOG.md        # Join the running server, add the file
+mdprobe stop                # Kill the server and clean the lock file
+```
 
-## Two Review Workflows
+`-d`/`--detach` starts the server process detached from the terminal. Subsequent invocations join it normally. Use `mdprobe stop` (or `mdprobe stop --force`) to shut it down.
 
-mdProbe supports two distinct review workflows for different contexts:
-
-### 1. Blocking review (`--once`) — for CI/CD and scripts
+### 5.3. Blocking review for CI (`--once`)
 
 ```bash
 mdprobe spec.md --once
 ```
 
-Blocks the process until you click **"Finish Review"** in the UI. When you finish, annotations are saved to `spec.annotations.yaml` and the process exits with the list of created files. This is useful for pipelines that need human sign-off before continuing.
+![Blocking review session with Finish Review button](screenshot-once-review.png)
 
-`--once` mode always creates an **isolated server instance** — it does not participate in the singleton. This ensures review sessions have independent lifecycle.
+Blocks the process until you click **"Finish Review"** in the UI. Exits with the list of created annotation files — useful for pipelines that need human sign-off before continuing. `--once` always creates an isolated server instance (does not join the singleton).
 
-### 2. AI-assisted review (MCP) — for AI coding agents
+### 5.4. AI-assisted review (MCP)
 
-When working with AI agents (Claude Code, Cursor, etc.), the workflow is different. The agent does **not** use `--once`. Instead:
+When working with AI agents, the agent uses the MCP tools instead of `--once`:
 
 ```
 Agent writes spec.md
@@ -132,7 +131,7 @@ Agent calls mdprobe_update → resolves annotations
 Human sees resolved items in real-time (greyed out)
 ```
 
-The server stays running across the entire conversation. The agent reads annotations on demand — no blocking, no process exit. Multiple files can be reviewed in the same session via the singleton server.
+The server stays running across the entire conversation. Multiple files can be reviewed in the same session.
 
 ---
 
@@ -150,9 +149,28 @@ File changes detected via chokidar, pushed over WebSocket. Debounced at 100ms. S
 
 Every heading gets approve/reject buttons. Approving a parent cascades to all children. Progress bar tracks reviewed vs total sections.
 
-### Drift Detection
+### Drift Recovery
 
-Warning banner when the source file changes after annotations were created.
+When the source file changes after annotations were created, mdProbe runs a 5-step pipeline to re-locate each annotation span:
+
+```
+1. Hash check   — file unchanged? use stored offsets directly (~0ms)
+2. Exact match  — quote text still appears uniquely in source
+3. Fuzzy match  — Myers bit-parallel, threshold ≥ 0.60 within ±2 kB window
+4. Tree path    — heading + paragraph fingerprint via mdast
+5. Keyword dist — rare-word anchors as last resort
+→ confident / drifted / orphan
+```
+
+`drifted` annotations show a dashed amber underline and require your explicit confirmation (`acceptDrift`) before being re-anchored as `open`. `orphan` annotations appear in a dedicated panel section without inline highlight.
+
+![Drifted annotation with dashed amber underline + Drifted panel section](screenshot-drifted.png)
+
+### Char-precise Highlighting
+
+v0.5.0 uses the **CSS Custom Highlight API** (zero DOM mutation) to render annotation marks. Selections are anchored by UTF-16 character offsets in the raw Markdown source, not by line/column numbers — so cross-block selections, reformatted code, and paragraph-wrapping edits don't break anchors silently.
+
+![Inline highlights with semantic tag colors](screenshot-highlight-inline.png)
 
 ### Themes
 
@@ -174,15 +192,59 @@ Five themes based on Catppuccin: Mocha (dark, default), Macchiato, Frappe, Latte
 ```bash
 mdprobe export spec.md --report   # Markdown review report
 mdprobe export spec.md --inline   # Annotations inserted into source
-mdprobe export spec.md --json     # Plain JSON
+mdprobe export spec.md --json     # Plain JSON (v2 schema)
 mdprobe export spec.md --sarif    # SARIF 2.1.0 (CI/CD integration)
+```
+
+---
+
+## Browser Requirements
+
+v0.5.0 requires the **CSS Custom Highlight API** for inline annotation rendering.
+
+| Browser | Minimum version |
+|---------|----------------|
+| Chrome / Edge | 105+ |
+| Firefox | 140+ |
+| Safari | 17.2+ |
+
+On older browsers mdProbe shows a modal explaining the limitation and falls back to a read-only annotation list. Inline highlights are disabled.
+
+---
+
+## CLI Reference
+
+```
+mdprobe [files...] [options]
+
+Options:
+  --port <n>         Port number (default: 3000, auto-increments if busy)
+  --once             Blocking review — isolated server, exits on "Finish Review"
+  -d, --detach       Start server in background and exit
+  --no-open          Don't auto-open browser
+  --help, -h         Show help
+  --version, -v      Show version
+
+Subcommands:
+  setup                         Interactive setup (skill + MCP + hook)
+  setup --remove                Uninstall everything
+  setup --yes [--author <name>] Non-interactive setup
+  mcp                           Start MCP server (stdio, for AI agents)
+  config [key] [value]          Manage configuration
+  export <path> [flags]         Export annotations (--report, --inline, --json, --sarif)
+  migrate <path> [--dry-run]    Batch migrate v1 annotations to v2
+  stop [--force]                Kill singleton server and clean lock file
 ```
 
 ---
 
 ## AI Agent Integration
 
-mdProbe includes an MCP (Model Context Protocol) server and a skill file (`SKILL.md`) that teaches AI agents how to use the review workflow. This enables a two-way loop: the agent writes markdown, the human annotates, the agent reads feedback and resolves it.
+<p align="center">
+  <img src="screenshot-hero.png" alt="mdProbe full interface with annotations and inline highlights" />
+</p>
+
+mdProbe includes an MCP server and a `SKILL.md` that teaches AI agents the review workflow. This enables a two-way loop: the agent writes Markdown, the human annotates, the agent reads feedback and resolves it.
 
 ### Setup
 
@@ -191,17 +253,15 @@ mdprobe setup
 ```
 
 Interactive wizard that:
-1. Installs the `SKILL.md` to detected IDEs (Claude Code, Cursor, Gemini)
+1. Installs `SKILL.md` to detected IDEs (Claude Code, Cursor, Gemini)
 2. Registers the MCP server (`mdprobe mcp`) in Claude Code (`~/.claude.json` or `claude mcp`) and in Cursor (`~/.cursor/mcp.json` when that folder exists)
 3. Migrates legacy Claude PostToolUse hooks from older mdprobe versions (if any)
 4. Configures your author name
 
-Non-interactive: `mdprobe setup --yes --author "Your Name"`
+Non-interactive: `mdprobe setup --yes --author "Your Name"`  
 Remove everything: `mdprobe setup --remove`
 
 ### MCP Tools
-
-Once set up, AI agents can call these tools:
 
 | Tool | Purpose |
 |------|---------|
@@ -209,8 +269,6 @@ Once set up, AI agents can call these tools:
 | `mdprobe_annotations` | Read annotations and section statuses |
 | `mdprobe_update` | Resolve, reply, add, or delete annotations |
 | `mdprobe_status` | Check if the server is running |
-
-The MCP server participates in the singleton — if a CLI-started server is already running, the agent reuses it.
 
 ### Manual MCP Registration
 
@@ -232,135 +290,37 @@ claude mcp add --scope user --transport stdio mdprobe -- mdprobe mcp
 }
 ```
 
-**WSL + Cursor on Windows:** Node’s home is your Linux home (e.g. `/home/you`), while the Cursor **desktop app** reads MCP from the Windows profile (`%USERPROFILE%\\.cursor\\mcp.json`). When you run `mdprobe setup` **inside WSL**, it now writes **both** `~/.cursor/mcp.json` (Linux) and, via `/mnt/c/...`, the Windows `mcp.json` with a `wsl.exe` bridge to your Linux `mdprobe` binary—so you do not need to maintain that file by hand. `WSL_DISTRO_NAME` and `cmd.exe` must be available (normal WSL2 install).
+**WSL + Cursor on Windows:** Node's home is your Linux home (e.g. `/home/you`), while the Cursor desktop app reads MCP from the Windows profile (`%USERPROFILE%\.cursor\mcp.json`). When you run `mdprobe setup` inside WSL, it writes both `~/.cursor/mcp.json` (Linux) and, via `/mnt/c/...`, the Windows `mcp.json` with a `wsl.exe` bridge to your Linux `mdprobe` binary. `WSL_DISTRO_NAME` and `cmd.exe` must be available (normal WSL2 install).
 
 ---
 
-## CLI Reference
+## Migration v0.4 → v0.5
 
+Schema v1 used `selectors.position { startLine, startColumn, endLine, endColumn }`. v0.5.0 replaces this with `range { start, end }` (UTF-16 character offsets), which is more precise and survives line-wrapping edits.
+
+**Automatic:** `AnnotationFile.load()` detects v1 files and migrates them in-place, writing a `.bak` backup first (e.g. `spec.annotations.yaml.bak`).
+
+**Batch (recommended before upgrading a large repo):**
+
+```bash
+mdprobe migrate docs/ --dry-run   # Preview changes without writing
+mdprobe migrate docs/             # Apply migration
 ```
-mdprobe [files...] [options]
 
-Options:
-  --port <n>      Port number (default: 3000, auto-increments if busy)
-  --once          Blocking review — isolated server, exits on "Finish Review"
-  --no-open       Don't auto-open browser
-  --help, -h      Show help
-  --version, -v   Show version
+**Rollback:** restore the `.bak` file alongside the `.annotations.yaml` file.
 
-Subcommands:
-  setup                  Interactive setup (skill + MCP + hook)
-  setup --remove         Uninstall everything
-  setup --yes [--author] Non-interactive setup
-  mcp                    Start MCP server (stdio, for AI agents)
-  config [key] [value]   Manage configuration
-  export <path> [flags]  Export annotations (--report, --inline, --json, --sarif)
-```
+See [docs/SCHEMA.md](docs/SCHEMA.md) for the full v2 field reference.
 
 ---
 
-## Library API
+## Library & HTTP API
 
-### Embedding in your own server
+mdProbe ships as an npm package you can embed in your own server — no separate process needed.
 
-```javascript
-import { createHandler } from '@henryavila/mdprobe'
-
-const handler = createHandler({
-  resolveFile: (req) => '/path/to/file.md',
-  listFiles: () => [
-    { id: 'spec', path: '/docs/spec.md', label: 'Specification' },
-  ],
-  basePath: '/review',
-  author: 'Review Bot',
-  onComplete: (result) => {
-    console.log(`Review done: ${result.annotations} annotations`)
-  },
-})
-
-import http from 'node:http'
-http.createServer(handler).listen(3000)
-```
-
-### Working with annotations programmatically
-
-```javascript
-import { AnnotationFile } from '@henryavila/mdprobe/annotations'
-
-const af = await AnnotationFile.load('spec.annotations.yaml')
-
-// Query
-const open = af.getOpen()
-const bugs = af.getByTag('bug')
-
-// Mutate
-af.add({
-  selectors: {
-    position: { startLine: 10, startColumn: 1, endLine: 10, endColumn: 40 },
-    quote: { exact: 'selected text', prefix: '', suffix: '' },
-  },
-  comment: 'This needs clarification',
-  tag: 'question',
-  author: 'Henry',
-})
-af.resolve(bugs[0].id)
-await af.save('spec.annotations.yaml')
-
-// Export
-import { exportJSON, exportSARIF } from '@henryavila/mdprobe/export'
-const sarif = exportSARIF(af, 'spec.md')
-```
-
----
-
-## Annotation Schema
-
-Sidecar file format (`<filename>.annotations.yaml`):
-
-```yaml
-version: 1
-source: spec.md
-source_hash: "sha256:abc123..."
-sections:
-  - heading: Introduction
-    level: 2
-    status: approved
-annotations:
-  - id: "a1b2c3d4"
-    selectors:
-      position: { startLine: 15, startColumn: 1, endLine: 15, endColumn: 42 }
-      quote: { exact: "The system shall support concurrent users" }
-    comment: "How many concurrent users?"
-    tag: question
-    status: open
-    author: Henry
-    created_at: "2026-04-08T10:30:00.000Z"
-    replies:
-      - author: Agent
-        comment: "Target is 500 concurrent."
-        created_at: "2026-04-08T11:00:00.000Z"
-```
-
-JSON Schema available at `@henryavila/mdprobe/schema.json`.
-
----
-
-## HTTP API
-
-Available when the server is running:
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/files` | List markdown files |
-| `GET` | `/api/file?path=<file>` | Rendered HTML + TOC + frontmatter |
-| `GET` | `/api/annotations?path=<file>` | Annotations + sections + drift status |
-| `POST` | `/api/annotations` | Create/update/delete annotations |
-| `POST` | `/api/sections` | Approve/reject/reset sections |
-| `GET` | `/api/export?path=<file>&format=<fmt>` | Export (json, report, inline, sarif) |
-| `GET` | `/api/status` | Server identity, PID, port, file list |
-| `POST` | `/api/add-files` | Add files to a running server (singleton join) |
-
-WebSocket at `/ws` for real-time updates.
+- **[docs/EMBEDDING.md](docs/EMBEDDING.md)** — `createHandler` (Express/Node middleware), `AnnotationFile` class, export helpers, anchoring utilities
+- **[docs/HTTP-API.md](docs/HTTP-API.md)** — full REST + WebSocket endpoint reference
+- **[docs/SCHEMA.md](docs/SCHEMA.md)** — annotation YAML schema v2, field-by-field reference
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — project structure, rendering pipeline, key design decisions
 
 ---
 
@@ -374,32 +334,7 @@ npm run build:ui
 npm test
 ```
 
-### Project Structure
-
-```
-bin/cli.js              CLI entry point
-src/
-  server.js             HTTP + WebSocket server
-  singleton.js          Lock file + cross-process singleton coordination
-  mcp.js                MCP server (4 tools, stdio transport)
-  renderer.js           Markdown → HTML (unified/remark/rehype)
-  annotations.js        Annotation CRUD + section approval
-  export.js             Export: report, inline, JSON, SARIF
-  setup.js              IDE skill + MCP + hook registration
-  setup-ui.js           Interactive setup wizard
-  handler.js            Library API for embedding
-  config.js             User config (~/.mdprobe.json)
-  open-browser.js       Cross-platform browser launcher
-  hash.js               SHA-256 drift detection
-  anchoring.js          Text position matching
-  ui/
-    components/         Preact components
-    hooks/              WebSocket, keyboard, theme, annotations
-    state/store.js      Preact Signals state
-    styles/themes.css   Catppuccin themes
-schema.json             Annotation YAML schema
-skills/mdprobe/         AI agent skill (SKILL.md)
-```
+For project structure and architecture details see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 

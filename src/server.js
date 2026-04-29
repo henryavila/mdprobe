@@ -5,11 +5,27 @@ import node_net from 'node:net'
 import { URL } from 'node:url'
 import { WebSocketServer } from 'ws'
 import { watch } from 'chokidar'
+import { unified } from 'unified'
+import remarkParse from 'remark-parse'
+import remarkGfm from 'remark-gfm'
 import { render } from './renderer.js'
 import { AnnotationFile, computeSectionStatus } from './annotations.js'
 import { detectDrift } from './hash.js'
-import { reanchorAll } from './anchoring.js'
+import { locate } from './anchoring/v2/index.js'
 import { createLogger } from './telemetry.js'
+
+function reanchorAllV2(anns, source) {
+  const mdast = unified().use(remarkParse).use(remarkGfm).parse(source)
+  const result = new Map()
+  for (const ann of anns) {
+    const r = locate(ann, source, mdast)
+    result.set(ann.id, {
+      status: r.state === 'orphan' ? 'orphan' : 'anchored',
+      position: r.range || null,
+    })
+  }
+  return result
+}
 
 const tel = createLogger('server')
 
@@ -144,6 +160,13 @@ const MIME_TYPES = {
   '.ttf': 'font/ttf',
   '.txt': 'text/plain',
   '.md': 'text/markdown',
+  // Video / audio
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.ogg': 'video/ogg',
+  '.mov': 'video/quicktime',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
 }
 
 /**
@@ -429,7 +452,7 @@ export async function createServer(options) {
       debounceTimers.delete(filePath)
       try {
         const content = await node_fs.readFile(filePath, 'utf-8')
-        const rendered = render(content)
+        const rendered = render(content, { mdPath: filePath })
         broadcastToAll({
           type: 'update',
           file: fileName,
@@ -444,7 +467,7 @@ export async function createServer(options) {
           if (drift.drifted) {
             const af = await AnnotationFile.load(sidecarPath)
             const anns = af.toJSON().annotations
-            const anchorResults = reanchorAll(anns, content)
+            const anchorResults = reanchorAllV2(anns, content)
             broadcastToAll({
               type: 'drift',
               warning: true,
@@ -570,12 +593,27 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
           return sendJSON(res, 404, { error: `File not found: ${queryPath}` })
         }
         const content = await node_fs.readFile(match, 'utf-8')
-        const rendered = render(content)
+        const rendered = render(content, { mdPath: match })
         return sendJSON(res, 200, {
           html: rendered.html,
           toc: rendered.toc,
           frontmatter: rendered.frontmatter,
         })
+      }
+
+      // GET /api/source?path=<path> — return raw markdown source
+      if (req.method === 'GET' && pathname === '/api/source') {
+        const queryPath = parsedUrl.searchParams.get('path')
+        if (!queryPath) {
+          return sendJSON(res, 400, { error: 'Missing ?path= parameter' })
+        }
+        const match = findFile(resolvedFiles, queryPath)
+        if (!match) {
+          return sendJSON(res, 404, { error: `File not found: ${queryPath}` })
+        }
+        const text = await node_fs.readFile(match, 'utf-8')
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Length': Buffer.byteLength(text) })
+        return res.end(text)
       }
 
       // GET /api/annotations?path=<path>
@@ -601,7 +639,7 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
             const drift = await detectDrift(sidecarPath, match)
             if (drift.drifted) {
               const content = await node_fs.readFile(match, 'utf8')
-              const anchorResults = reanchorAll(json.annotations, content)
+              const anchorResults = reanchorAllV2(json.annotations, content)
               json.drift = {
                 anchorStatus: Object.fromEntries(
                   [...anchorResults].map(([id, r]) => [id, r.status === 'orphan' ? 'orphan' : 'anchored'])
@@ -665,6 +703,15 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
             break
           case 'reply':
             af.addReply(data.id, { author: data.author, comment: data.comment })
+            break
+          case 'editReply':
+            af.editReply(data.id, data.replyId, data.comment)
+            break
+          case 'deleteReply':
+            af.deleteReply(data.id, data.replyId)
+            break
+          case 'acceptDrift':
+            af.acceptDrift(data.id, data.range, data.contextHash)
             break
           default:
             return sendJSON(res, 400, { error: `Unknown action: ${action}` })
@@ -867,6 +914,43 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
           onFinish({ files: resolvedFiles, yamlPaths })
         }
         return sendJSON(res, 200, { status: 'finished', yamlPaths })
+      }
+
+      // GET /api/asset?path=<absolutePath> — serve any file inside a registered dir
+      if (req.method === 'GET' && pathname === '/api/asset') {
+        const url = new URL(req.url, `http://${req.headers.host}`)
+        const requestedPath = url.searchParams.get('path')
+        if (!requestedPath) {
+          return sendJSON(res, 400, { error: 'path required' })
+        }
+        const resolved = node_path.resolve(requestedPath)
+
+        // Security: must be inside an allowed dir
+        const allowedDirs = [
+          assetBaseDir,
+          ...resolvedFiles.map(f => node_path.dirname(f)),
+        ]
+        const isAllowed = allowedDirs.some(dir => {
+          const dirAbs = node_path.resolve(dir)
+          return resolved === dirAbs || resolved.startsWith(dirAbs + node_path.sep)
+        })
+        if (!isAllowed) {
+          return sendJSON(res, 403, { error: 'forbidden' })
+        }
+
+        try {
+          const data = await node_fs.readFile(resolved)
+          const ext = node_path.extname(resolved)
+          res.writeHead(200, {
+            'Content-Type': getMimeType(ext) || 'application/octet-stream',
+            'Content-Length': data.length,
+            'Cache-Control': 'public, max-age=3600',
+          })
+          return res.end(data)
+        } catch (err) {
+          if (err.code === 'ENOENT') return send404(res)
+          throw err
+        }
       }
 
       // GET /assets/*  — serve built UI assets first, then markdown file assets

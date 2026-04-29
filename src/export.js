@@ -105,6 +105,34 @@ export function exportReport(af, _sourceContent) {
  * @param {string} sourceContent - Original markdown text
  * @returns {string} Markdown with inline annotation comments
  */
+/**
+ * Converts a character offset to a 1-based line number within sourceContent.
+ * @param {string} sourceContent
+ * @param {number} offset
+ * @returns {number} 1-based line number
+ */
+function offsetToLine(sourceContent, offset) {
+  const before = sourceContent.slice(0, offset)
+  return before.split('\n').length
+}
+
+/**
+ * Returns the 1-based start line for an annotation, supporting both v1 (selectors)
+ * and v2 (range) formats.
+ * @param {object} ann
+ * @param {string} sourceContent
+ * @returns {number|null}
+ */
+function getStartLine(ann, sourceContent) {
+  if (ann.selectors?.position?.startLine != null) {
+    return ann.selectors.position.startLine
+  }
+  if (ann.range?.start != null) {
+    return offsetToLine(sourceContent, ann.range.start)
+  }
+  return null
+}
+
 export function exportInline(af, sourceContent) {
   const annotations = af.annotations ?? []
 
@@ -117,13 +145,13 @@ export function exportInline(af, sourceContent) {
   // Sort annotations by startLine descending so that insertions don't shift
   // line indices of subsequent annotations.
   const sorted = [...annotations].sort((a, b) => {
-    const lineA = a.selectors?.position?.startLine ?? 0
-    const lineB = b.selectors?.position?.startLine ?? 0
+    const lineA = getStartLine(a, sourceContent) ?? 0
+    const lineB = getStartLine(b, sourceContent) ?? 0
     return lineB - lineA
   })
 
   for (const ann of sorted) {
-    const startLine = ann.selectors?.position?.startLine
+    const startLine = getStartLine(ann, sourceContent)
     if (startLine == null) continue
 
     // Build the comment line

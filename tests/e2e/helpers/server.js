@@ -12,8 +12,9 @@ const fixturesDir = join(__dirname, '..', '..', 'fixtures')
  * @param {string[]} opts.files - fixture filenames (e.g. ['sample.md'])
  * @param {boolean} [opts.withAnnotations=false] - copy .annotations.yaml too
  * @param {number} [opts.port=0] - 0 = auto-assign
+ * @param {string} [opts.author='e2e-tester'] - author name passed to createServer
  */
-export async function startServer({ files, withAnnotations = false, port = 0 }) {
+export async function startServer({ files, withAnnotations = false, port = 0, author = 'e2e-tester' }) {
   const tmpDir = join(__dirname, '..', '.tmp-' + Date.now())
   mkdirSync(tmpDir, { recursive: true })
 
@@ -34,7 +35,7 @@ export async function startServer({ files, withAnnotations = false, port = 0 }) 
     files: filePaths,
     port,
     open: false,
-    author: 'e2e-tester',
+    author,
   })
 
   return { server, url: server.url, tmpDir }

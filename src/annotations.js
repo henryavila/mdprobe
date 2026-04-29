@@ -1,6 +1,8 @@
 import yaml from 'js-yaml'
 import { randomUUID } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { needsMigration, migrateFile } from './anchoring/v2/migrate.js'
 
 const VALID_TAGS = ['bug', 'question', 'suggestion', 'nitpick']
 
@@ -45,10 +47,13 @@ export class AnnotationFile {
     this.annotations = data.annotations ?? []
     this.sections = data.sections ?? []
 
-    // Ensure every annotation has a replies array
+    // Ensure every annotation has a replies array and backfill missing reply ids
     for (const ann of this.annotations) {
       if (!ann.replies) {
         ann.replies = []
+      }
+      for (const reply of ann.replies) {
+        if (!reply.id) reply.id = randomUUID()
       }
     }
   }
@@ -80,6 +85,18 @@ export class AnnotationFile {
    * @throws {Error} if the file does not exist or contains invalid YAML
    */
   static async load(yamlPath) {
+    if (needsMigration(yamlPath)) {
+      const mdPath = yamlPath.replace(/\.annotations\.yaml$/, '.md')
+      try {
+        const result = migrateFile(yamlPath, mdPath)
+        if (result.migrated) {
+          console.log(`mdprobe: migrated ${result.count} annotations to schema v2 in ${path.basename(mdPath)} (backup: ${path.basename(result.backupPath)})`)
+        }
+      } catch (err) {
+        console.error(`mdprobe: failed to migrate ${yamlPath}: ${err.message}`)
+      }
+    }
+
     const content = await readFile(yamlPath, 'utf-8')
 
     let data
@@ -215,10 +232,42 @@ export class AnnotationFile {
   addReply(annotationId, { author, comment }) {
     const ann = this._findOrThrow(annotationId)
     ann.replies.push({
+      id: randomUUID(),
       author,
       comment,
       created_at: new Date().toISOString(),
     })
+  }
+
+  editReply(annotationId, replyId, comment) {
+    const ann = this._findOrThrow(annotationId)
+    const reply = ann.replies.find(r => r.id === replyId)
+    if (!reply) throw new Error(`Reply ${replyId} not found on ${annotationId}`)
+    reply.comment = comment
+    reply.updated_at = new Date().toISOString()
+  }
+
+  deleteReply(annotationId, replyId) {
+    const ann = this._findOrThrow(annotationId)
+    const before = ann.replies.length
+    ann.replies = ann.replies.filter(r => r.id !== replyId)
+    if (ann.replies.length === before) throw new Error(`Reply ${replyId} not found on ${annotationId}`)
+  }
+
+  /**
+   * Accepts a drifted annotation's new location by updating its range and
+   * contextHash, then resetting status to 'open'.
+   * @param {string} annotationId
+   * @param {{ start: number, end: number }} currentRange
+   * @param {string} currentContextHash
+   */
+  acceptDrift(annotationId, currentRange, currentContextHash) {
+    const ann = this._findOrThrow(annotationId)
+    ann.range = currentRange
+    if (!ann.anchor) ann.anchor = {}
+    ann.anchor.contextHash = currentContextHash
+    ann.status = 'open'
+    ann.updated_at = new Date().toISOString()
   }
 
   // ---------------------------------------------------------------------------
@@ -371,20 +420,32 @@ export class AnnotationFile {
   toJSON() {
     return {
       version: this.version,
+      schema_version: 2,
       source: this.source,
       source_hash: this.sourceHash,
       sections: this.sections,
-      annotations: this.annotations.map(ann => ({
-        id: ann.id,
-        selectors: ann.selectors,
-        comment: ann.comment,
-        tag: ann.tag,
-        status: ann.status,
-        author: ann.author,
-        created_at: ann.created_at,
-        updated_at: ann.updated_at,
-        replies: ann.replies ?? [],
-      })),
+      annotations: this.annotations.map(ann => {
+        // Normalize: if the annotation was created via the v2 API it stores
+        // selectors under `ann.selectors`; if it was loaded from a v2 YAML
+        // the fields live at the top level.  Always persist in the flat
+        // (YAML file) format: { range, quote, anchor } at top level.
+        const range  = ann.range  ?? ann.selectors?.range
+        const quote  = ann.quote  ?? ann.selectors?.quote
+        const anchor = ann.anchor ?? ann.selectors?.anchor
+        return {
+          id: ann.id,
+          comment: ann.comment,
+          tag: ann.tag,
+          status: ann.status,
+          author: ann.author,
+          created_at: ann.created_at,
+          updated_at: ann.updated_at,
+          replies: ann.replies ?? [],
+          ...(range  != null && { range  }),
+          ...(quote  != null && { quote  }),
+          ...(anchor != null && { anchor }),
+        }
+      }),
     }
   }
 

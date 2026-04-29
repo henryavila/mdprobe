@@ -1,3 +1,4 @@
+import node_path from 'node:path'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
@@ -80,6 +81,13 @@ function rehypeSourcePositions() {
 
         if (INLINE_TAGS.has(node.tagName) && pos.start.column != null) {
           node.properties['dataSourceCol'] = String(pos.start.column)
+        }
+
+        if (pos.start.offset != null) {
+          node.properties['dataSourceStart'] = String(pos.start.offset)
+        }
+        if (pos.end?.offset != null) {
+          node.properties['dataSourceEnd'] = String(pos.end.offset)
         }
       }
     })
@@ -203,23 +211,78 @@ function rehypeMathClass() {
 }
 
 // ---------------------------------------------------------------------------
-// Build the unified processor
+// Custom rehype plugin: rewrite relative img/source/video/audio src/srcset
+// to /api/asset?path=<absolute>, resolving relative to the source markdown
+// file's directory. Leaves absolute URLs and data: URIs untouched.
 // ---------------------------------------------------------------------------
-const processor = unified()
-  .use(remarkParse)
-  .use(remarkGfm)
-  .use(remarkMath)
-  .use(remarkFrontmatter, ['yaml', 'toml'])
-  .use(remarkExtractFrontmatter)
-  .use(remarkExtractToc)
-  .use(remarkRehype, { allowDangerousHtml: true })
-  // Source positions BEFORE rehype-raw so raw HTML elements are not annotated
-  .use(rehypeSourcePositions)
-  .use(rehypeRaw)
-  .use(rehypeHighlight)
-  .use(rehypeMermaid)
-  .use(rehypeMathClass)
-  .use(rehypeStringify, { allowDangerousHtml: true })
+function rehypeRewriteAssets({ mdPath } = {}) {
+  if (!mdPath) return () => () => {}
+  const sourceDir = node_path.dirname(mdPath)
+  const REWRITE_TAGS = new Set(['img', 'source', 'video', 'audio'])
+
+  function isRelativeSrc(value) {
+    if (!value || typeof value !== 'string') return false
+    if (value.startsWith('http://') || value.startsWith('https://')) return false
+    if (value.startsWith('//')) return false
+    if (value.startsWith('data:')) return false
+    if (value.startsWith('/')) return false
+    return true
+  }
+
+  function rewriteOne(value) {
+    if (!isRelativeSrc(value)) return value
+    const resolved = node_path.resolve(sourceDir, value)
+    return `/api/asset?path=${encodeURIComponent(resolved)}`
+  }
+
+  return () => (tree) => {
+    visit(tree, 'element', (node) => {
+      if (!REWRITE_TAGS.has(node.tagName)) return
+      if (node.properties?.src) {
+        node.properties.src = rewriteOne(node.properties.src)
+      }
+      // srcset is a comma-separated list "url 1x, url 2x"
+      if (node.properties?.srcSet || node.properties?.srcset) {
+        const key = node.properties.srcSet != null ? 'srcSet' : 'srcset'
+        const original = node.properties[key]
+        if (typeof original === 'string') {
+          const rewritten = original.split(',').map(part => {
+            const trimmed = part.trim()
+            const [url, ...descriptors] = trimmed.split(/\s+/)
+            return [rewriteOne(url), ...descriptors].join(' ')
+          }).join(', ')
+          node.properties[key] = rewritten
+        }
+      }
+    })
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Build the unified processor (base, without mdPath-dependent plugins)
+// ---------------------------------------------------------------------------
+function buildProcessor(opts = {}) {
+  const { mdPath } = opts
+  return unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkMath)
+    .use(remarkFrontmatter, ['yaml', 'toml'])
+    .use(remarkExtractFrontmatter)
+    .use(remarkExtractToc)
+    .use(remarkRehype, { allowDangerousHtml: true })
+    // Source positions BEFORE rehype-raw so raw HTML elements are not annotated
+    .use(rehypeSourcePositions)
+    .use(rehypeRaw)
+    .use(rehypeHighlight)
+    .use(rehypeMermaid)
+    .use(rehypeMathClass)
+    .use(rehypeRewriteAssets({ mdPath }))
+    .use(rehypeStringify, { allowDangerousHtml: true })
+}
+
+// Cached processor for callers that don't provide mdPath (backward compat)
+const defaultProcessor = buildProcessor()
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -230,12 +293,21 @@ const processor = unified()
  * extraction, and frontmatter parsing.
  *
  * @param {string} markdown - The markdown source string
+ * @param {object} [opts]
+ * @param {string} [opts.mdPath] - Absolute path to the source .md file.
+ *   When provided, relative image/media src values are rewritten to
+ *   `/api/asset?path=<absolute>` so the browser can fetch them.
  * @returns {{ html: string, toc: Array<{heading: string, level: number, line: number}>, frontmatter: object|null }}
  */
-export function render(markdown) {
+export function render(markdown, opts = {}) {
   if (!markdown || typeof markdown !== 'string' || markdown.trim() === '') {
     return { html: '', toc: [], frontmatter: null }
   }
+
+  const { mdPath } = opts
+  // Use the cached default processor when no mdPath is needed (fast path),
+  // otherwise build a per-call processor with the asset-rewriting plugin.
+  const processor = mdPath ? buildProcessor({ mdPath }) : defaultProcessor
 
   const file = processor.processSync(markdown)
 

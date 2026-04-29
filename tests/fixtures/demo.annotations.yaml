@@ -1,0 +1,123 @@
+schema_version: 2
+source: demo.md
+annotations:
+  # Annotation 1 — question with 1 reply (thread demo)
+  - id: a1b2c3d4
+    author: you
+    tag: question
+    status: open
+    comment: Should the token expiry be configurable per-client or is 24 h a hard requirement?
+    created_at: '2026-04-20T09:00:00.000Z'
+    replies:
+      - author: you
+        comment: >-
+          Confirmed: 24 h is the default but can be overridden via the
+          AUTH_TOKEN_TTL environment variable. Refresh token TTL stays at 7 days.
+        created_at: '2026-04-20T09:45:00.000Z'
+    range:
+      start: 865
+      end: 935
+    quote:
+      exact: "Tokens are issued by `POST /auth/login` and expire after **24 hours**."
+      prefix: "carry a valid JWT bearer token.\n"
+      suffix: "\nRefresh tokens are stored serve"
+    anchor:
+      contextHash: "sha256:4457d04b869dc47e66bbe2cea8460ca93c36d0ed174ae7c53f330b1719f1a8b1"
+
+  # Annotation 2 — bug cross-block (heading → first code line): precision fix demo
+  - id: b2c3d4e5
+    author: you
+    tag: bug
+    status: open
+    comment: >-
+      The section heading says "Create task" but the HTTP method comment in
+      the code block is missing the request body schema. Should document
+      required vs optional fields inline.
+    created_at: '2026-04-21T10:30:00.000Z'
+    range:
+      start: 2153
+      end: 2202
+    quote:
+      exact: "### Create task\n\n```javascript\n// POST /api/tasks"
+      prefix: " each update         |\n\n## API\n\n"
+      suffix: "\nconst response = await fetch('/"
+    anchor:
+      contextHash: "sha256:69a9933486de17a2bdaab4ad457e308845a82f5b743c40f98cd3fe22c5420a0c"
+
+  # Annotation 3 — suggestion on the data model table
+  - id: c3d4e5f6
+    author: you
+    tag: suggestion
+    status: open
+    comment: >-
+      Consider adding a `labels` column (text[] in Postgres) to support
+      multi-label filtering without a separate join table.
+    created_at: '2026-04-21T11:00:00.000Z'
+    range:
+      start: 1374
+      end: 1443
+    quote:
+      exact: "| Field        | Type        | Description                          |"
+      prefix: "iber endpoints.\n\n## Data Model\n\n"
+      suffix: "\n|--------------|-------------|-"
+    anchor:
+      contextHash: "sha256:7e237fc2d9cd001b69333abfb48524c53aad30f71553c6809a94885d6c043885"
+
+  # Annotation 4 — nitpick on password rules
+  - id: d4e5f6a7
+    author: you
+    tag: nitpick
+    status: open
+    comment: >-
+      "Minimum 8 characters" is below current NIST SP 800-63B guidance which
+      recommends at least 15 for most systems. Worth revisiting.
+    created_at: '2026-04-22T08:15:00.000Z'
+    range:
+      start: 1016
+      end: 1068
+    quote:
+      exact: "minimum 8 characters, at least one uppercase letter,"
+      prefix: "d on each use.\n\nPassword rules: "
+      suffix: "\none digit, and one special char"
+    anchor:
+      contextHash: "sha256:f36ed365bc3678dad4dcdeea7db2d2340f6fe69c8546b242999d724a970e7dd5"
+
+  # Annotation 5 — bug overlapping annotation 1 (alpha blending demo)
+  # Range 909-935 overlaps annotation 1's range 865-935
+  - id: e5f6a7b8
+    author: you
+    tag: bug
+    status: open
+    comment: >-
+      The 24-hour expiry is not reflected in the OpenAPI spec — the spec still
+      shows 3600 seconds (1 hour). These need to stay in sync.
+    created_at: '2026-04-22T14:00:00.000Z'
+    range:
+      start: 909
+      end: 935
+    quote:
+      exact: "expire after **24 hours**."
+      prefix: "ssued by `POST /auth/login` and "
+      suffix: "\nRefresh tokens are stored serve"
+    anchor:
+      contextHash: "sha256:93c3194cfe5c0b816582ce4e958acca81e574abbe83676a41972e0ca8c1912f0"
+
+  # Annotation 6 — drifted (velocity sentence will change in demo-edited.md)
+  # Load against demo-edited.md to see drifted state; status set explicitly for screenshot.
+  - id: f6a7b8c9
+    author: you
+    tag: question
+    status: drifted
+    comment: >-
+      Is sprint length fixed at two weeks or configurable per team?
+      The formula assumes a constant s but the implementation might vary.
+    created_at: '2026-04-23T09:00:00.000Z'
+    range:
+      start: 3037
+      end: 3115
+    quote:
+      exact: "Task velocity is measured as the average number of tasks completed per sprint."
+      prefix: "\n    done --> [*]\n```\n\n## Math\n\n"
+      suffix: "\nLet $n$ be the number of comple"
+    anchor:
+      contextHash: "sha256:b6158206028c760971558abf5eee3971be05d5d1b0100b62866368f15b6e91c5"

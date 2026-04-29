@@ -1,80 +1,53 @@
 import { useRef, useEffect, useState } from 'preact/hooks'
-import { currentHtml, selectedAnnotationId, annotations, showResolved } from '../state/store.js'
+import { currentHtml, selectedAnnotationId, annotations, showResolved, sections,
+         currentSource, currentMdast } from '../state/store.js'
 import { Popover } from './Popover.jsx'
 import { SectionApproval } from './SectionApproval.jsx'
-import { sections } from '../state/store.js'
+import { createCssHighlightHighlighter } from '../highlighters/css-highlight-highlighter.js'
+import { resolveClickedAnnotation } from '../click/resolver.js'
+import { describe as describeRange } from '../../anchoring/v2/index.js'
 
 export function Content({ annotationOps }) {
   const contentRef = useRef(null)
   const [popover, setPopover] = useState(null) // { x, y, selectors }
-  const rafRef = useRef(null)
+  const highlighterRef = useRef(null)
+  if (!highlighterRef.current) highlighterRef.current = createCssHighlightHighlighter()
 
-  // Inject annotation highlights into DOM after HTML renders.
-  // Uses requestAnimationFrame to debounce rapid signal updates — multiple
-  // annotations.value assignments (HTTP response + WS broadcast) collapse
-  // into a single DOM manipulation pass per frame.
+  // (A) Highlight sync — runs on annotations or content change
   useEffect(() => {
     const el = contentRef.current
     if (!el) return
-
-    // Cancel any pending highlight pass from a previous signal update
-    if (rafRef.current) cancelAnimationFrame(rafRef.current)
-
-    // Snapshot current values before the async rAF callback
-    const currentAnns = annotations.value
-    const currentShowResolved = showResolved.value
-    const currentSelectedId = selectedAnnotationId.value
-
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = null
-      applyHighlights(el, currentAnns, currentShowResolved, currentSelectedId)
+    const h = highlighterRef.current
+    let raf2 = 0
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        if (!el.isConnected) return
+        h.sync(el, annotations.value, {
+          source: currentSource.value,
+          mdast: currentMdast.value,
+        })
+        h.setSelection(el, selectedAnnotationId.value)
+      })
     })
-
     return () => {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current)
-        rafRef.current = null
-      }
+      cancelAnimationFrame(raf1)
+      if (raf2) cancelAnimationFrame(raf2)
     }
-  }, [currentHtml.value, annotations.value, showResolved.value, selectedAnnotationId.value])
+  }, [annotations.value, showResolved.value, currentHtml.value])
 
-  function applyHighlights(el, anns, resolved, selectedId) {
-    // Remove previous highlights and normalize text nodes to prevent fragmentation
-    el.querySelectorAll('mark[data-highlight-id]').forEach(mark => {
-      const parent = mark.parentNode
-      while (mark.firstChild) parent.insertBefore(mark.firstChild, mark)
-      parent.removeChild(mark)
-      parent.normalize()
-    })
+  // (B) Selection-only effect
+  useEffect(() => {
+    const el = contentRef.current
+    if (!el) return
+    highlighterRef.current.setSelection(el, selectedAnnotationId.value)
+  }, [selectedAnnotationId.value])
 
-    // Get visible annotations
-    const visibleAnns = resolved
-      ? anns
-      : anns.filter(a => a.status === 'open')
-
-    for (const ann of visibleAnns) {
-      const startLine = ann.selectors?.position?.startLine
-      if (!startLine) continue
-
-      const sourceEl = el.querySelector(`[data-source-line="${startLine}"]`)
-      if (!sourceEl) continue
-
-      const exact = ann.selectors?.quote?.exact
-      if (!exact) continue
-
-      const markClass = `annotation-highlight tag-${ann.tag}${ann.status === 'resolved' ? ' resolved' : ''}${selectedId === ann.id ? ' selected' : ''}`
-
-      // Strategy 1: Try single-element exact match (fast path)
-      if (trySingleElementHighlight(sourceEl, exact, ann.id, markClass)) continue
-
-      // Strategy 2: Cross-element match — walk text nodes from sourceEl onwards
-      const endLine = ann.selectors?.position?.endLine || startLine
-      if (tryCrossElementHighlight(el, sourceEl, endLine, exact, ann.id, markClass)) continue
-
-      // Strategy 3: Fallback — highlight all text in line range
-      highlightLineRange(el, startLine, endLine, ann.id, markClass)
-    }
-  }
+  // (C) HTML reload — clear all
+  useEffect(() => {
+    const el = contentRef.current
+    if (!el) return
+    highlighterRef.current.clear(el)
+  }, [currentHtml.value])
 
   // Inject SectionApproval buttons next to h2 headings
   useEffect(() => {
@@ -211,250 +184,33 @@ export function Content({ annotationOps }) {
     return svg
   }
 
-  // ---------------------------------------------------------------------------
-  // Highlight helper functions
-  // ---------------------------------------------------------------------------
-
-  /** Recursively collect all text nodes from a DOM subtree. */
-  function collectTextNodes(root, result) {
-    for (const child of root.childNodes) {
-      if (child.nodeType === 3) {
-        if (child.textContent.trim() !== '') result.push(child)
-      } else if (child.nodeType === 1) {
-        collectTextNodes(child, result)
-      }
-    }
-  }
-
-  /** Try to highlight exact text within a single element. Returns true on success. */
-  function trySingleElementHighlight(sourceEl, exact, id, className) {
-    const textNodes = []
-    collectTextNodes(sourceEl, textNodes)
-    for (const node of textNodes) {
-      const idx = node.textContent.indexOf(exact)
-      if (idx === -1) continue
-      const range = document.createRange()
-      range.setStart(node, idx)
-      range.setEnd(node, idx + exact.length)
-      const mark = document.createElement('mark')
-      mark.setAttribute('data-highlight-id', id)
-      mark.className = className
-      try {
-        range.surroundContents(mark)
-      } catch {
-        return false
-      }
-      return true
-    }
-    return false
-  }
-
-  /**
-   * Highlight text that spans multiple elements.
-   * Collect text nodes from sourceEl through endLine, concatenate, find match,
-   * then wrap each matching portion in its own <mark>.
-   */
-  function tryCrossElementHighlight(contentEl, sourceEl, endLine, exact, id, className) {
-    // Collect text nodes from source elements within the line range
-    const textNodes = []
-    const els = contentEl.querySelectorAll('[data-source-line]')
-    for (const e of els) {
-      const line = parseInt(e.getAttribute('data-source-line'))
-      if (line < parseInt(sourceEl.getAttribute('data-source-line'))) continue
-      if (line > endLine) break
-      // Skip nested elements whose parent already covers the same line
-      if (e.parentElement?.closest(`[data-source-line="${line}"]`)) continue
-      collectTextNodes(e, textNodes)
-    }
-    if (textNodes.length === 0) return false
-
-    // Build concatenated text with separator tracking
-    // Browser selections across block elements include \n between them
-    let concat = ''
-    const nodeMap = [] // { node, startInConcat, endInConcat }
-    for (let i = 0; i < textNodes.length; i++) {
-      // Add a newline between text nodes from different source LINES
-      // (not different elements — inline elements like <code> within the
-      // same line have different parents but are on the same line)
-      if (i > 0) {
-        const prevParent = textNodes[i - 1].parentElement?.closest('[data-source-line]')
-        const currParent = textNodes[i].parentElement?.closest('[data-source-line]')
-        const prevLine = prevParent?.getAttribute('data-source-line')
-        const currLine = currParent?.getAttribute('data-source-line')
-        if (prevLine !== currLine) concat += '\n'
-      }
-      const start = concat.length
-      concat += textNodes[i].textContent
-      nodeMap.push({ node: textNodes[i], startInConcat: start, endInConcat: concat.length })
-    }
-
-    // Try exact match in the concatenated text
-    let matchIdx = concat.indexOf(exact)
-
-    // If not found, try with whitespace normalization
-    if (matchIdx === -1) {
-      // Build a normalized nodeMap so we can compute overlaps accurately
-      let normConcat = ''
-      const normMap = []
-      for (let i = 0; i < textNodes.length; i++) {
-        if (i > 0) {
-          const prevLine = textNodes[i - 1].parentElement?.closest('[data-source-line]')?.getAttribute('data-source-line')
-          const currLine = textNodes[i].parentElement?.closest('[data-source-line]')?.getAttribute('data-source-line')
-          if (prevLine !== currLine) normConcat += ' '
-        }
-        const start = normConcat.length
-        normConcat += textNodes[i].textContent.replace(/\s+/g, ' ')
-        normMap.push({ node: textNodes[i], startInNorm: start, endInNorm: normConcat.length })
-      }
-
-      const normalizedExact = exact.replace(/\s+/g, ' ')
-      const normIdx = normConcat.indexOf(normalizedExact)
-      if (normIdx === -1) return false
-
-      const normEnd = normIdx + normalizedExact.length
-      for (const nm of normMap) {
-        const overlapStart = Math.max(normIdx, nm.startInNorm)
-        const overlapEnd = Math.min(normEnd, nm.endInNorm)
-        if (overlapStart >= overlapEnd) continue
-        const nodeStart = overlapStart - nm.startInNorm
-        const nodeEnd = overlapEnd - nm.startInNorm
-        wrapTextNode(nm.node, nodeStart, nodeEnd, id, className)
-      }
-      return true
-    }
-
-    const matchEnd = matchIdx + exact.length
-
-    // Wrap matching portions in each text node
-    for (const nm of nodeMap) {
-      const overlapStart = Math.max(matchIdx, nm.startInConcat)
-      const overlapEnd = Math.min(matchEnd, nm.endInConcat)
-      if (overlapStart >= overlapEnd) continue
-
-      const nodeStart = overlapStart - nm.startInConcat
-      const nodeEnd = overlapEnd - nm.startInConcat
-      wrapTextNode(nm.node, nodeStart, nodeEnd, id, className)
-    }
-    return true
-  }
-
-  /** Highlight all text nodes within elements between startLine and endLine. */
-  function highlightLineRange(contentEl, startLine, endLine, id, className) {
-    // Collect text nodes FIRST, then wrap — never mutate DOM during iteration
-    const textNodes = []
-    const els = contentEl.querySelectorAll('[data-source-line]')
-    for (const e of els) {
-      const line = parseInt(e.getAttribute('data-source-line'))
-      if (line < startLine || line > endLine) continue
-      // Skip nested elements with same data-source-line (parent already covers them)
-      if (e.parentElement?.closest(`[data-source-line="${line}"]`)) continue
-      collectTextNodes(e, textNodes)
-    }
-    for (const tn of textNodes) {
-      wrapTextNode(tn, 0, tn.textContent.length, id, className)
-    }
-  }
-
-  /** Wrap a portion of a text node in a <mark> element. */
-  function wrapTextNode(textNode, start, end, id, className) {
-    if (start >= end || start >= textNode.textContent.length) return
-    try {
-      const range = document.createRange()
-      range.setStart(textNode, start)
-      range.setEnd(textNode, Math.min(end, textNode.textContent.length))
-      const mark = document.createElement('mark')
-      mark.setAttribute('data-highlight-id', id)
-      mark.className = className
-      range.surroundContents(mark)
-    } catch {
-      // surroundContents can fail if range crosses element boundaries
-    }
-  }
-
-  /** Find the closest ancestor with data-source-line. */
-  function findSourceLineParent(node, root) {
-    let current = node.nodeType === 3 ? node.parentElement : node
-    while (current && current !== root) {
-      if (current.hasAttribute?.('data-source-line')) return current
-      current = current.parentElement
-    }
-    return null
-  }
-
   // Handle text selection for creating annotations
   function handleMouseUp(e) {
     const selection = window.getSelection()
-    if (!selection || selection.isCollapsed || selection.toString().trim() === '') {
-      return
-    }
-
-    const text = selection.toString()
+    if (!selection || selection.isCollapsed || selection.toString().trim() === '') return
     const range = selection.getRangeAt(0)
     const rect = range.getBoundingClientRect()
-
-    // Find source line/column from data attributes
-    const startNode = findSourceNode(range.startContainer)
-    const endNode = findSourceNode(range.endContainer)
-
-    if (startNode) {
-      const startLine = parseInt(startNode.getAttribute('data-source-line'))
-      const startCol = parseInt(startNode.getAttribute('data-source-col') || '1')
-      const endLine = endNode ? parseInt(endNode.getAttribute('data-source-line')) : startLine
-
-      // Calculate endColumn from the text content rather than relying on the
-      // end element's data-source-col (which is the element's START column)
-      let endCol
-      const lines = text.split('\n')
-      if (lines.length === 1) {
-        endCol = startCol + text.length
-      } else {
-        // Multi-line: end column is the length of the last line + 1
-        endCol = lines[lines.length - 1].length + 1
-      }
-
-      // Extract prefix/suffix from DOM context for disambiguation
-      let prefix = ''
-      let suffix = ''
-      try {
-        const prefixRange = document.createRange()
-        prefixRange.setStart(startNode, 0)
-        prefixRange.setEnd(range.startContainer, range.startOffset)
-        prefix = prefixRange.toString().slice(-30)
-      } catch { /* ignore range errors */ }
-      try {
-        const endEl = endNode || startNode
-        const suffixRange = document.createRange()
-        suffixRange.setStart(range.endContainer, range.endOffset)
-        suffixRange.setEnd(endEl, endEl.childNodes.length)
-        suffix = suffixRange.toString().slice(0, 30)
-      } catch { /* ignore range errors */ }
-
-      setPopover({
-        x: rect.left + rect.width / 2,
-        y: rect.bottom + 8,
-        exact: text,
-        selectors: {
-          position: { startLine, startColumn: startCol, endLine, endColumn: endCol },
-          quote: { exact: text, prefix, suffix }
-        }
-      })
+    let selectors
+    try {
+      selectors = describeRange(range, contentRef.current, currentSource.value, currentMdast.value)
+    } catch {
+      return
     }
+    setPopover({
+      x: rect.left + rect.width / 2,
+      y: rect.bottom + 8,
+      exact: selectors.quote.exact,
+      selectors,
+    })
   }
 
-  function findSourceNode(node) {
-    let current = node.nodeType === 3 ? node.parentElement : node
-    while (current && current !== contentRef.current) {
-      if (current.hasAttribute?.('data-source-line')) return current
-      current = current.parentElement
-    }
-    return null
-  }
-
-  // Click on annotation highlight -> select it
+  // Click on annotation highlight -> select it (CSS Highlight API — no DOM marks)
   function handleContentClick(e) {
-    const highlight = e.target.closest('[data-highlight-id]')
-    if (highlight) {
-      selectedAnnotationId.value = highlight.getAttribute('data-highlight-id')
+    const ann = resolveClickedAnnotation(e, contentRef.current, annotations.value)
+    if (ann) {
+      selectedAnnotationId.value = ann.id
+    } else {
+      selectedAnnotationId.value = null
     }
   }
 

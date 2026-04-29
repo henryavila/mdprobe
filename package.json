@@ -1,6 +1,6 @@
 {
   "name": "@henryavila/mdprobe",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "Markdown viewer + reviewer for terminal/WSL with live reload, persistent annotations, and AI agent integration",
   "type": "module",
   "bin": {
@@ -35,9 +35,11 @@
   "dependencies": {
     "@clack/prompts": "^1.2.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "approx-string-match": "^2.0.0",
     "chokidar": "^4.0.0",
     "diff-match-patch": "^1.0.5",
     "highlight.js": "^11.10.0",
+    "js-sha256": "^0.11.1",
     "js-yaml": "^4.1.0",
     "rehype-raw": "^7.0.0",
     "rehype-stringify": "^10.0.0",

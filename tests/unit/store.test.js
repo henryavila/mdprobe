@@ -6,6 +6,8 @@ import {
   orphanedAnnotations, anchoredAnnotations,
   showResolved, filterTag, filterAuthor,
   setAnnotations, setAnnotationsImmediate,
+  modalAnnotationId, modalOpenMode,
+  openAnnotationModal, closeAnnotationModal,
 } from '../../src/ui/state/store.js'
 
 describe('anchorStatus store signals', () => {
@@ -121,5 +123,56 @@ describe('setAnnotations debounce', () => {
     // Wait past debounce — the old debounced value should NOT overwrite
     await new Promise(r => setTimeout(r, 100))
     expect(annotations.value[0].id).toBe('immediate')
+  })
+})
+
+describe('modal signals', () => {
+  beforeEach(() => {
+    closeAnnotationModal()
+  })
+
+  it('modalAnnotationId and modalOpenMode default to null', () => {
+    expect(modalAnnotationId.value).toBe(null)
+    expect(modalOpenMode.value).toBe(null)
+  })
+
+  it('openAnnotationModal sets both signals', () => {
+    openAnnotationModal('abc', 'edit')
+    expect(modalAnnotationId.value).toBe('abc')
+    expect(modalOpenMode.value).toBe('edit')
+  })
+
+  it('openAnnotationModal supports reply mode', () => {
+    openAnnotationModal('xyz', 'reply')
+    expect(modalAnnotationId.value).toBe('xyz')
+    expect(modalOpenMode.value).toBe('reply')
+  })
+
+  it('closeAnnotationModal clears both signals', () => {
+    openAnnotationModal('abc', 'edit')
+    closeAnnotationModal()
+    expect(modalAnnotationId.value).toBe(null)
+    expect(modalOpenMode.value).toBe(null)
+  })
+})
+
+describe('v2 anchoring signals', () => {
+  it('currentSource and currentMdast default to empty/null', async () => {
+    const { currentSource, currentMdast } = await import('../../src/ui/state/store.js')
+    expect(currentSource.value).toBe('')
+    expect(currentMdast.value).toBe(null)
+  })
+})
+
+describe('orphanedAnnotationsV2 and driftedAnnotations computed', () => {
+  it('separates drifted / orphan via status field', async () => {
+    const store = await import('../../src/ui/state/store.js')
+    store.annotations.value = [
+      { id: 'a', status: 'open' },
+      { id: 'b', status: 'drifted' },
+      { id: 'c', status: 'orphan' },
+    ]
+    expect(store.driftedAnnotations.value.find(a => a.id === 'b')).toBeDefined()
+    expect(store.orphanedAnnotationsV2.value.find(a => a.id === 'c')).toBeDefined()
   })
 })
