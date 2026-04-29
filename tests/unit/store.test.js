@@ -155,3 +155,24 @@ describe('modal signals', () => {
     expect(modalOpenMode.value).toBe(null)
   })
 })
+
+describe('v2 anchoring signals', () => {
+  it('currentSource and currentMdast default to empty/null', async () => {
+    const { currentSource, currentMdast } = await import('../../src/ui/state/store.js')
+    expect(currentSource.value).toBe('')
+    expect(currentMdast.value).toBe(null)
+  })
+})
+
+describe('orphanedAnnotationsV2 and driftedAnnotations computed', () => {
+  it('separates drifted / orphan via status field', async () => {
+    const store = await import('../../src/ui/state/store.js')
+    store.annotations.value = [
+      { id: 'a', status: 'open' },
+      { id: 'b', status: 'drifted' },
+      { id: 'c', status: 'orphan' },
+    ]
+    expect(store.driftedAnnotations.value.find(a => a.id === 'b')).toBeDefined()
+    expect(store.orphanedAnnotationsV2.value.find(a => a.id === 'c')).toBeDefined()
+  })
+})
