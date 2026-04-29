@@ -53,6 +53,8 @@ Subcommands:
   export <path> [flags]  Export annotations (--report, --inline, --json, --sarif)
   migrate <path> [--dry-run]  Batch migrate v1 annotations to v2
   stop [--force]         Kill singleton server and clean lock file
+  update [--yes] [--dry-run] [--force]
+                         Update mdProbe to the latest version
 `)
 }
 
@@ -68,6 +70,16 @@ function fatal(msg) {
 
 async function main() {
   const args = [...rawArgs]
+
+  // Update notifier — must run before subcommand dispatch so it can suppress
+  // banner during update/stop/migrate/setup commands.
+  try {
+    const { setupNotifier } = await import('../src/update-notify.js')
+    const pkg = JSON.parse(readFileSync(PKG_PATH, 'utf-8'))
+    setupNotifier(pkg, args)
+  } catch {
+    // Non-blocking: notifier failure must never break the CLI.
+  }
 
   // ---- migrate subcommand (early exit) ----
   if (args[0] === 'migrate') {
@@ -88,6 +100,18 @@ async function main() {
     const force = args.includes('--force') || args.includes('-y')
     const result = await runStop({ force })
     process.exit(result.stopped || result.reason === 'no-lock' ? 0 : 1)
+  }
+
+  // ---- update subcommand (early exit) ----
+  if (args[0] === 'update') {
+    const { runUpdate } = await import('../src/cli/update-cmd.js')
+    const opts = {
+      yes: hasFlag(args, '--yes', '-y'),
+      dryRun: hasFlag(args, '--dry-run'),
+      force: hasFlag(args, '--force'),
+    }
+    const exitCode = await runUpdate(opts)
+    process.exit(exitCode)
   }
 
   // Determine mode from subcommand

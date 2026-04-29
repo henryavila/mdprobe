@@ -1,6 +1,6 @@
 {
   "name": "@henryavila/mdprobe",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Markdown viewer + reviewer for terminal/WSL with live reload, persistent annotations, and AI agent integration",
   "type": "module",
   "bin": {
@@ -19,7 +19,8 @@
     "schema.json",
     "scripts/",
     "skills/",
-    "templates/"
+    "templates/",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "test": "vitest run",
@@ -49,6 +50,7 @@
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.0.0",
     "unified": "^11.0.0",
+    "update-notifier": "^7.0.0",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
