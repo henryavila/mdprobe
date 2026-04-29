@@ -4,7 +4,39 @@ import { extractKeywords } from './keywords.js'
 import { fingerprint } from './fingerprint.js'
 
 export function textOffsetWithinAncestor(ancestor, targetNode, targetOffset) {
-  if (targetNode === ancestor) return targetOffset
+  // Case 1: targetNode is an element node (not a text node).
+  // targetOffset is a CHILD INDEX, not a char offset per the DOM Range spec.
+  // We must sum the textContent of children[0..targetOffset-1].
+  if (targetNode.nodeType === Node.ELEMENT_NODE) {
+    let charOffset = 0
+    const children = targetNode.childNodes
+    for (let i = 0; i < targetOffset && i < children.length; i++) {
+      charOffset += children[i].textContent?.length || 0
+    }
+    // If targetNode IS the ancestor, we are done.
+    if (targetNode === ancestor) return charOffset
+    // Otherwise, add the text content that precedes targetNode within ancestor.
+    let offsetBeforeTarget = 0
+    function walkBeforeTarget(node) {
+      if (node === targetNode) return true // found — stop
+      if (node.nodeType === Node.TEXT_NODE) {
+        offsetBeforeTarget += node.textContent.length
+        return false
+      }
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        for (const child of node.childNodes) {
+          if (walkBeforeTarget(child)) return true
+        }
+      }
+      return false
+    }
+    walkBeforeTarget(ancestor)
+    return offsetBeforeTarget + charOffset
+  }
+
+  // Case 2: targetNode is a text node (the common case).
+  // targetOffset is a char offset within that text node.
+  if (targetNode === ancestor) return targetOffset // defensive: text node IS the ancestor (unusual)
   let offset = 0
 
   function walkNodes(node) {
@@ -14,7 +46,7 @@ export function textOffsetWithinAncestor(ancestor, targetNode, targetOffset) {
       return null
     }
     if (node.nodeType === Node.ELEMENT_NODE) {
-      for (let child of node.childNodes) {
+      for (const child of node.childNodes) {
         const result = walkNodes(child)
         if (result !== null) return result
       }
