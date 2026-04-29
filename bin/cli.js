@@ -10,7 +10,7 @@ import { exportReport, exportInline, exportJSON, exportSARIF } from '../src/expo
 import { createServer as createMdprobeServer } from '../src/server.js'
 import { findMarkdownFiles, extractFlag, hasFlag } from '../src/cli-utils.js'
 import { openBrowser } from '../src/open-browser.js'
-import { discoverExistingServer, joinExistingServer, writeLockFile, registerShutdownHandlers } from '../src/singleton.js'
+import { discoverExistingServer, joinExistingServer, writeLockFile, readLockFile, registerShutdownHandlers } from '../src/singleton.js'
 import { createLogger, getParentCmd } from '../src/telemetry.js'
 
 const tel = createLogger('cli')
@@ -37,11 +37,12 @@ function printUsage() {
   mdProbe — Markdown viewer + reviewer with live reload and persistent annotations.
 
 Options:
-  --port <n>    Port number (default: 3000)
-  --once        Review mode (single pass, then exit)
-  --no-open     Don't auto-open browser
-  --help, -h    Show help
-  --version, -v Show version
+  --port <n>      Port number (default: 3000)
+  --once          Review mode (single pass, then exit)
+  -d, --detach    Start server in background and exit
+  --no-open       Don't auto-open browser
+  --help, -h      Show help
+  --version, -v   Show version
 
 Subcommands:
   setup                  Interactive setup (skill + MCP + hook)
@@ -275,6 +276,7 @@ async function main() {
   const portFlag = extractFlag(args, '--port')
   const onceFlag = hasFlag(args, '--once')
   const noOpenFlag = hasFlag(args, '--no-open')
+  const detachFlag = hasFlag(args, '--detach') || hasFlag(args, '-d')
 
   // Validate port
   let port = 3000
@@ -325,6 +327,49 @@ async function main() {
         mdFiles.push(resolved)
       }
     }
+  }
+
+  // --- Detach mode: spawn child + exit parent ---
+  if (detachFlag && !onceFlag) {
+    const { spawn } = await import('node:child_process')
+    const lockPath = process.env.MDPROBE_LOCK_PATH || undefined
+
+    // Build child args: strip --detach/-d flags; always add --no-open (parent opens browser)
+    const childArgs = rawArgs.filter(a => a !== '--detach' && a !== '-d' && a !== '--no-open')
+    childArgs.push('--no-open')
+
+    const child = spawn(process.execPath, [process.argv[1], ...childArgs], {
+      detached: true,
+      stdio: 'ignore',
+    })
+    child.unref()
+
+    // Wait up to 5s for the child to write its lock file
+    let lock = null
+    for (let i = 0; i < 50; i++) {
+      await new Promise(r => setTimeout(r, 100))
+      lock = await readLockFile(lockPath)
+      if (lock) break
+    }
+
+    if (!lock) {
+      console.error('mdprobe: child failed to start (no lock file after 5s)')
+      tel.log('exit', { code: 1, reason: 'detach:no-lock' })
+      process.exit(1)
+    }
+
+    console.log(`Server detached at ${lock.url} (PID ${lock.pid})`)
+    console.log('Use `mdprobe stop` to terminate it.')
+
+    if (!noOpenFlag) {
+      const fileUrl = mdFiles.length === 1
+        ? `${lock.url}/${basename(mdFiles[0])}`
+        : lock.url
+      try { await openBrowser(fileUrl) } catch { /* ignore */ }
+    }
+
+    tel.log('exit', { code: 0, reason: 'detached' })
+    process.exit(0)
   }
 
   // --once mode: always isolated (never singleton)
