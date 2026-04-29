@@ -420,20 +420,32 @@ export class AnnotationFile {
   toJSON() {
     return {
       version: this.version,
+      schema_version: 2,
       source: this.source,
       source_hash: this.sourceHash,
       sections: this.sections,
-      annotations: this.annotations.map(ann => ({
-        id: ann.id,
-        selectors: ann.selectors,
-        comment: ann.comment,
-        tag: ann.tag,
-        status: ann.status,
-        author: ann.author,
-        created_at: ann.created_at,
-        updated_at: ann.updated_at,
-        replies: ann.replies ?? [],
-      })),
+      annotations: this.annotations.map(ann => {
+        // Normalize: if the annotation was created via the v2 API it stores
+        // selectors under `ann.selectors`; if it was loaded from a v2 YAML
+        // the fields live at the top level.  Always persist in the flat
+        // (YAML file) format: { range, quote, anchor } at top level.
+        const range  = ann.range  ?? ann.selectors?.range
+        const quote  = ann.quote  ?? ann.selectors?.quote
+        const anchor = ann.anchor ?? ann.selectors?.anchor
+        return {
+          id: ann.id,
+          comment: ann.comment,
+          tag: ann.tag,
+          status: ann.status,
+          author: ann.author,
+          created_at: ann.created_at,
+          updated_at: ann.updated_at,
+          replies: ann.replies ?? [],
+          ...(range  != null && { range  }),
+          ...(quote  != null && { quote  }),
+          ...(anchor != null && { anchor }),
+        }
+      }),
     }
   }
 

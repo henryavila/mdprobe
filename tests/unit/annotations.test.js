@@ -740,7 +740,11 @@ describe('toJSON()', () => {
   it('returns a JSON-serializable object with all top-level and annotation fields', () => {
     const file = AnnotationFile.create('spec.md', 'sha256:abc')
     file.add({
-      selectors: { position: { startLine: 5, endLine: 5 } },
+      selectors: {
+        range: { start: 5, end: 20 },
+        quote: { exact: 'some text', prefix: '', suffix: '' },
+        anchor: { contextHash: 'sha256:abc123' },
+      },
       comment: 'detailed note',
       tag: 'suggestion',
       author: 'Bob',
@@ -749,13 +753,15 @@ describe('toJSON()', () => {
     const json = file.toJSON()
 
     expect(json.version).toBe(1)
+    expect(json.schema_version).toBe(2)
     expect(json.source).toBe('spec.md')
     expect(json.source_hash).toBe('sha256:abc')
     expect(json.annotations).toHaveLength(1)
     expect(json.sections).toBeInstanceOf(Array)
 
     const ann = json.annotations[0]
-    for (const key of ['id', 'selectors', 'comment', 'tag', 'status', 'author', 'created_at', 'updated_at', 'replies']) {
+    // v2 format: range, quote, anchor at top level (normalized from selectors)
+    for (const key of ['id', 'comment', 'tag', 'status', 'author', 'created_at', 'updated_at', 'replies', 'range', 'quote', 'anchor']) {
       expect(ann).toHaveProperty(key)
     }
 

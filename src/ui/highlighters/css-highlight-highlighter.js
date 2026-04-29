@@ -54,7 +54,11 @@ export function createCssHighlightHighlighter() {
   function syncOne(id, contentEl, annotations, source, mdast) {
     const ann = annotations.find(a => a.id === id)
     if (!ann) return null
-    const r = locate(ann, source, mdast)
+    // Support both formats:
+    //  - Annotations loaded from v2 YAML have { range, quote, anchor } at top level
+    //  - Annotations freshly created via the API have { selectors: { range, quote, anchor } }
+    const locateArg = ann.selectors || { range: ann.range, quote: ann.quote, anchor: ann.anchor }
+    const r = locate(locateArg, source, mdast)
     if (r.state === 'orphan' || !r.range) {
       removeOne(id)
       return r
