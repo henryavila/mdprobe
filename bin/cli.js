@@ -51,6 +51,7 @@ Subcommands:
   config [key] [value]   Manage configuration
   export <path> [flags]  Export annotations (--report, --inline, --json, --sarif)
   migrate <path> [--dry-run]  Batch migrate v1 annotations to v2
+  stop [--force]         Kill singleton server and clean lock file
 `)
 }
 
@@ -78,6 +79,14 @@ async function main() {
     const dryRun = args.includes('--dry-run')
     const stats = runMigrate(target, { dryRun })
     process.exit(stats.errors > 0 ? 1 : 0)
+  }
+
+  // ---- stop subcommand (early exit) ----
+  if (args[0] === 'stop') {
+    const { runStop } = await import('../src/cli/stop-cmd.js')
+    const force = args.includes('--force') || args.includes('-y')
+    const result = await runStop({ force })
+    process.exit(result.stopped || result.reason === 'no-lock' ? 0 : 1)
   }
 
   // Determine mode from subcommand
