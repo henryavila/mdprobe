@@ -19,7 +19,8 @@
     "schema.json",
     "scripts/",
     "skills/",
-    "templates/"
+    "templates/",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "test": "vitest run",
@@ -49,6 +50,7 @@
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.0.0",
     "unified": "^11.0.0",
+    "update-notifier": "^7.3.1",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
