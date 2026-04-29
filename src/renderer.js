@@ -81,6 +81,13 @@ function rehypeSourcePositions() {
         if (INLINE_TAGS.has(node.tagName) && pos.start.column != null) {
           node.properties['dataSourceCol'] = String(pos.start.column)
         }
+
+        if (pos.start.offset != null) {
+          node.properties['dataSourceStart'] = String(pos.start.offset)
+        }
+        if (pos.end?.offset != null) {
+          node.properties['dataSourceEnd'] = String(pos.end.offset)
+        }
       }
     })
   }
