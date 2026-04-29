@@ -1,7 +1,8 @@
 import { useState } from 'preact/hooks'
 import { rightPanelOpen, filteredAnnotations, selectedAnnotationId, showResolved,
          filterTag, filterAuthor, uniqueTags, uniqueAuthors, openAnnotations,
-         anchoredAnnotations, orphanedAnnotations, driftWarning, openAnnotationModal } from '../state/store.js'
+         anchoredAnnotations, orphanedAnnotations, driftWarning, openAnnotationModal,
+         driftedAnnotations, orphanedAnnotationsV2 } from '../state/store.js'
 
 export function RightPanel({ annotationOps }) {
   const isCollapsed = !rightPanelOpen.value
@@ -28,7 +29,9 @@ export function RightPanel({ annotationOps }) {
           {/* Header */}
           <div class="panel-header" style="padding: 12px; display: flex; justify-content: space-between; align-items: center">
             <span style="font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted)">
-              Annotations ({openAnnotations.value.length} open)
+              Annotations ({openAnnotations.value.length} open
+              {driftedAnnotations.value.length > 0 && ` · ${driftedAnnotations.value.length} drifted`}
+              {orphanedAnnotationsV2.value.length > 0 && ` · ${orphanedAnnotationsV2.value.length} orphan`})
             </span>
             <button class="btn btn-sm btn-ghost" onClick={() => rightPanelOpen.value = false}>×</button>
           </div>
@@ -62,7 +65,8 @@ export function RightPanel({ annotationOps }) {
 
           {/* Annotation list */}
           <div style="overflow-y: auto; padding: 0 8px; flex: 1">
-            {anchoredAnnotations.value.length === 0 && orphanedAnnotations.value.length === 0 ? (
+            {anchoredAnnotations.value.length === 0 && orphanedAnnotations.value.length === 0 &&
+             driftedAnnotations.value.length === 0 && orphanedAnnotationsV2.value.length === 0 ? (
               <div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px">
                 No annotations
               </div>
@@ -91,6 +95,13 @@ export function RightPanel({ annotationOps }) {
                     onSelect={(ann) => { selectedAnnotationId.value = ann.id }}
                     annotationOps={annotationOps}
                   />
+                )}
+
+                {driftedAnnotations.value.length > 0 && (
+                  <DriftedSection annotations={driftedAnnotations.value} annotationOps={annotationOps} />
+                )}
+                {orphanedAnnotationsV2.value.length > 0 && (
+                  <OrphanV2Section annotations={orphanedAnnotationsV2.value} annotationOps={annotationOps} />
                 )}
               </>
             )}
@@ -173,6 +184,57 @@ function OrphanedSection({ annotations, selectedAnnotationId, onSelect, annotati
           annotationOps={annotationOps}
           orphaned
         />
+      ))}
+    </div>
+  )
+}
+
+function DriftedSection({ annotations, annotationOps }) {
+  const [collapsed, setCollapsed] = useState(false)
+  return (
+    <div class="orphaned-section drifted-section">
+      <div class="orphaned-section-header" onClick={() => setCollapsed(c => !c)}>
+        <span>{collapsed ? '▸' : '▾'}</span>
+        <span>Drifted ({annotations.length}) — texto pode ter mudado</span>
+      </div>
+      {!collapsed && annotations.map(ann => (
+        <div key={ann.id} class="annotation-card drifted">
+          <span class={`tag tag-${ann.tag}`}>{ann.tag}</span>
+          <span style="margin-left: 6px; font-size: 11px;">{ann.author}</span>
+          <div class="quote">{ann.quote?.exact}</div>
+          <div style="font-size: 13px; margin-top: 4px">{ann.comment}</div>
+          <div style="margin-top: 6px; display: flex; gap: 6px">
+            <button class="btn btn-sm" onClick={() => annotationOps.acceptDrift?.(ann.id)}>Aceitar nova localização</button>
+            <button class="btn btn-sm btn-danger" onClick={() => {
+              if (confirm('Descartar esta anotação?')) annotationOps.deleteAnnotation(ann.id)
+            }}>Descartar</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function OrphanV2Section({ annotations, annotationOps }) {
+  const [collapsed, setCollapsed] = useState(false)
+  return (
+    <div class="orphaned-section">
+      <div class="orphaned-section-header" onClick={() => setCollapsed(c => !c)}>
+        <span>{collapsed ? '▸' : '▾'}</span>
+        <span>Não localizadas ({annotations.length})</span>
+      </div>
+      {!collapsed && annotations.map(ann => (
+        <div key={ann.id} class="annotation-card orphaned">
+          <span class={`tag tag-${ann.tag}`}>{ann.tag}</span>
+          <span style="margin-left: 6px; font-size: 11px;">{ann.author}</span>
+          <blockquote class="quote">{ann.quote?.exact || '(quote missing)'}</blockquote>
+          <div style="font-size: 13px; margin-top: 4px">{ann.comment}</div>
+          <div style="margin-top: 6px; display: flex; gap: 6px">
+            <button class="btn btn-sm btn-danger" onClick={() => {
+              if (confirm('Descartar esta anotação órfã?')) annotationOps.deleteAnnotation(ann.id)
+            }}>Descartar</button>
+          </div>
+        </div>
       ))}
     </div>
   )

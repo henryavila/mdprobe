@@ -38,6 +38,10 @@ describe('RightPanel', () => {
     addReply: vi.fn(),
   }
 
+  function renderPanel() {
+    return render(<RightPanel annotationOps={mockOps} />)
+  }
+
   beforeEach(() => {
     rightPanelOpen.value = true
     annotations.value = sampleAnnotations
@@ -328,6 +332,36 @@ describe('RightPanel', () => {
       const { container } = render(<RightPanel annotationOps={mockOps} />)
 
       expect(container.querySelector('.annotation-card .reply-input')).toBeNull()
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // Drifted and orphan v2 sections
+  // -------------------------------------------------------------------------
+
+  describe('drifted and orphan v2 sections', () => {
+    it('renders Drifted section when drifted annotations exist', () => {
+      annotations.value = [{
+        id: 'd1', tag: 'question', status: 'drifted', author: 'me', comment: 'check',
+        range: { start: 0, end: 5 },
+        quote: { exact: 'Hello', prefix: '', suffix: '' },
+        anchor: {},
+        created_at: '2026-01-01T00:00:00Z',
+      }]
+      const { getByText } = renderPanel()
+      expect(getByText(/Drifted \(1\)/)).toBeTruthy()
+    })
+
+    it('renders Não localizadas section when orphan annotations exist', () => {
+      annotations.value = [{
+        id: 'o1', tag: 'bug', status: 'orphan', author: 'me', comment: 'gone',
+        range: { start: 0, end: 5 },
+        quote: { exact: 'Hello', prefix: '', suffix: '' },
+        anchor: {},
+        created_at: '2026-01-01T00:00:00Z',
+      }]
+      const { getByText } = renderPanel()
+      expect(getByText(/Não localizadas \(1\)/)).toBeTruthy()
     })
   })
 })
