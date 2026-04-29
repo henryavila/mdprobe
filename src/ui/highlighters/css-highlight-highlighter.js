@@ -12,6 +12,9 @@ function tagColor(tag, alpha) {
   return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${alpha})`
 }
 
+const CSS_HIGHLIGHTS_SUPPORTED =
+  typeof CSS !== 'undefined' && typeof CSS.highlights !== 'undefined' && CSS.highlights !== null
+
 export function createCssHighlightHighlighter() {
   const registry = new Map()
   let styleEl = null
@@ -60,11 +63,16 @@ export function createCssHighlightHighlighter() {
       removeOne(id)
       return { state: 'orphan', score: 0 }
     }
-    const h = new Highlight(...ranges)
-    h.priority = new Date(ann.created_at).getTime()
-    const name = `ann-${ann.id}`
-    CSS.highlights.set(name, h)
-    registry.set(id, { highlight: h, ranges, state: r.state, name, ann })
+    if (CSS_HIGHLIGHTS_SUPPORTED) {
+      const h = new Highlight(...ranges)
+      h.priority = new Date(ann.created_at).getTime()
+      const name = `ann-${ann.id}`
+      CSS.highlights.set(name, h)
+      registry.set(id, { highlight: h, ranges, state: r.state, name, ann })
+    } else {
+      // No CSS Highlight API support — store ranges for potential fallback
+      registry.set(id, { highlight: null, ranges, state: r.state, name: `ann-${ann.id}`, ann })
+    }
     upsertRule(ann, r.state)
     return r
   }
@@ -72,7 +80,7 @@ export function createCssHighlightHighlighter() {
   function removeOne(id) {
     const entry = registry.get(id)
     if (!entry) return
-    CSS.highlights.delete(entry.name)
+    if (CSS_HIGHLIGHTS_SUPPORTED) CSS.highlights.delete(entry.name)
     registry.delete(id)
     removeRule(id)
   }
@@ -96,6 +104,7 @@ export function createCssHighlightHighlighter() {
   }
 
   function setSelection(contentEl, annotationId) {
+    if (!CSS_HIGHLIGHTS_SUPPORTED) return
     CSS.highlights.delete('ann-selected')
     if (annotationId == null) return
     const entry = registry.get(annotationId)

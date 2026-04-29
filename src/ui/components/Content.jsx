@@ -1,18 +1,19 @@
 import { useRef, useEffect, useState } from 'preact/hooks'
-import { currentHtml, selectedAnnotationId, annotations, showResolved } from '../state/store.js'
+import { currentHtml, selectedAnnotationId, annotations, showResolved, sections,
+         currentSource, currentMdast } from '../state/store.js'
 import { Popover } from './Popover.jsx'
 import { SectionApproval } from './SectionApproval.jsx'
-import { sections } from '../state/store.js'
-import { getHighlighter } from '../highlighters/index.js'
+import { createCssHighlightHighlighter } from '../highlighters/css-highlight-highlighter.js'
+import { resolveClickedAnnotation } from '../click/resolver.js'
+import { describe as describeRange } from '../../anchoring/v2/index.js'
 
 export function Content({ annotationOps }) {
   const contentRef = useRef(null)
   const [popover, setPopover] = useState(null) // { x, y, selectors }
   const highlighterRef = useRef(null)
-  const prevAnnsRef = useRef([])
-  if (!highlighterRef.current) highlighterRef.current = getHighlighter()
+  if (!highlighterRef.current) highlighterRef.current = createCssHighlightHighlighter()
 
-  // (A) Highlight sync — diff-aware; does NOT depend on selection
+  // (A) Highlight sync — runs on annotations or content change
   useEffect(() => {
     const el = contentRef.current
     if (!el) return
@@ -22,11 +23,9 @@ export function Content({ annotationOps }) {
       raf2 = requestAnimationFrame(() => {
         if (!el.isConnected) return
         h.sync(el, annotations.value, {
-          showResolved: showResolved.value,
-          prevAnnotations: prevAnnsRef.current,
-          selectedId: selectedAnnotationId.value,
+          source: currentSource.value,
+          mdast: currentMdast.value,
         })
-        prevAnnsRef.current = annotations.value
         h.setSelection(el, selectedAnnotationId.value)
       })
     })
@@ -34,22 +33,21 @@ export function Content({ annotationOps }) {
       cancelAnimationFrame(raf1)
       if (raf2) cancelAnimationFrame(raf2)
     }
-  }, [annotations.value, showResolved.value])
+  }, [annotations.value, showResolved.value, currentHtml.value])
 
-  // (B) HTML changed — wipe prev snapshot so next sync rebuilds from scratch
-  useEffect(() => {
-    const el = contentRef.current
-    if (!el) return
-    highlighterRef.current.clear(el)
-    prevAnnsRef.current = []
-  }, [currentHtml.value])
-
-  // (C) Selection — attribute-only, zero mark mutations
+  // (B) Selection-only effect
   useEffect(() => {
     const el = contentRef.current
     if (!el) return
     highlighterRef.current.setSelection(el, selectedAnnotationId.value)
   }, [selectedAnnotationId.value])
+
+  // (C) HTML reload — clear all
+  useEffect(() => {
+    const el = contentRef.current
+    if (!el) return
+    highlighterRef.current.clear(el)
+  }, [currentHtml.value])
 
   // Inject SectionApproval buttons next to h2 headings
   useEffect(() => {
@@ -186,90 +184,33 @@ export function Content({ annotationOps }) {
     return svg
   }
 
-  /** Find the closest ancestor with data-source-line. */
-  function findSourceLineParent(node, root) {
-    let current = node.nodeType === 3 ? node.parentElement : node
-    while (current && current !== root) {
-      if (current.hasAttribute?.('data-source-line')) return current
-      current = current.parentElement
-    }
-    return null
-  }
-
   // Handle text selection for creating annotations
   function handleMouseUp(e) {
     const selection = window.getSelection()
-    if (!selection || selection.isCollapsed || selection.toString().trim() === '') {
-      return
-    }
-
-    const text = selection.toString()
+    if (!selection || selection.isCollapsed || selection.toString().trim() === '') return
     const range = selection.getRangeAt(0)
     const rect = range.getBoundingClientRect()
-
-    // Find source line/column from data attributes
-    const startNode = findSourceNode(range.startContainer)
-    const endNode = findSourceNode(range.endContainer)
-
-    if (startNode) {
-      const startLine = parseInt(startNode.getAttribute('data-source-line'))
-      const startCol = parseInt(startNode.getAttribute('data-source-col') || '1')
-      const endLine = endNode ? parseInt(endNode.getAttribute('data-source-line')) : startLine
-
-      // Calculate endColumn from the text content rather than relying on the
-      // end element's data-source-col (which is the element's START column)
-      let endCol
-      const lines = text.split('\n')
-      if (lines.length === 1) {
-        endCol = startCol + text.length
-      } else {
-        // Multi-line: end column is the length of the last line + 1
-        endCol = lines[lines.length - 1].length + 1
-      }
-
-      // Extract prefix/suffix from DOM context for disambiguation
-      let prefix = ''
-      let suffix = ''
-      try {
-        const prefixRange = document.createRange()
-        prefixRange.setStart(startNode, 0)
-        prefixRange.setEnd(range.startContainer, range.startOffset)
-        prefix = prefixRange.toString().slice(-30)
-      } catch { /* ignore range errors */ }
-      try {
-        const endEl = endNode || startNode
-        const suffixRange = document.createRange()
-        suffixRange.setStart(range.endContainer, range.endOffset)
-        suffixRange.setEnd(endEl, endEl.childNodes.length)
-        suffix = suffixRange.toString().slice(0, 30)
-      } catch { /* ignore range errors */ }
-
-      setPopover({
-        x: rect.left + rect.width / 2,
-        y: rect.bottom + 8,
-        exact: text,
-        selectors: {
-          position: { startLine, startColumn: startCol, endLine, endColumn: endCol },
-          quote: { exact: text, prefix, suffix }
-        }
-      })
+    let selectors
+    try {
+      selectors = describeRange(range, contentRef.current, currentSource.value, currentMdast.value)
+    } catch {
+      return
     }
+    setPopover({
+      x: rect.left + rect.width / 2,
+      y: rect.bottom + 8,
+      exact: selectors.quote.exact,
+      selectors,
+    })
   }
 
-  function findSourceNode(node) {
-    let current = node.nodeType === 3 ? node.parentElement : node
-    while (current && current !== contentRef.current) {
-      if (current.hasAttribute?.('data-source-line')) return current
-      current = current.parentElement
-    }
-    return null
-  }
-
-  // Click on annotation highlight -> select it
+  // Click on annotation highlight -> select it (CSS Highlight API — no DOM marks)
   function handleContentClick(e) {
-    const highlight = e.target.closest('[data-highlight-id]')
-    if (highlight) {
-      selectedAnnotationId.value = highlight.getAttribute('data-highlight-id')
+    const ann = resolveClickedAnnotation(e, contentRef.current, annotations.value)
+    if (ann) {
+      selectedAnnotationId.value = ann.id
+    } else {
+      selectedAnnotationId.value = null
     }
   }
 
