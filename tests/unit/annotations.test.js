@@ -57,13 +57,15 @@ describe('AnnotationFile.load()', () => {
     expect(file.sourceHash).toMatch(/^sha256:/)
   })
 
-  it('loads all annotation fields: selectors, comment, tag, status, author, timestamps', async () => {
+  it('loads all annotation fields: range, quote, comment, tag, status, author, timestamps', async () => {
     const file = await AnnotationFile.load(SAMPLE_YAML)
     const ann = file.getById('a1b2c3')
 
-    expect(ann.selectors).toBeDefined()
-    expect(ann.selectors.position.startLine).toBe(5)
-    expect(ann.selectors.quote.exact).toBe('O sistema valida todos os inputs do formulário')
+    expect(ann.range).toBeDefined()
+    expect(typeof ann.range.start).toBe('number')
+    expect(typeof ann.range.end).toBe('number')
+    expect(ann.quote).toBeDefined()
+    expect(ann.quote.exact).toBe('O sistema valida todos os inputs do formulário')
     expect(ann.comment).toBe('Quais inputs? Precisa especificar campos')
     expect(ann.tag).toBe('question')
     expect(ann.status).toBe('open')

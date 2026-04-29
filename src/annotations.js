@@ -1,6 +1,8 @@
 import yaml from 'js-yaml'
 import { randomUUID } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { needsMigration, migrateFile } from './anchoring/v2/migrate.js'
 
 const VALID_TAGS = ['bug', 'question', 'suggestion', 'nitpick']
 
@@ -83,6 +85,18 @@ export class AnnotationFile {
    * @throws {Error} if the file does not exist or contains invalid YAML
    */
   static async load(yamlPath) {
+    if (needsMigration(yamlPath)) {
+      const mdPath = yamlPath.replace(/\.annotations\.yaml$/, '.md')
+      try {
+        const result = migrateFile(yamlPath, mdPath)
+        if (result.migrated) {
+          console.log(`mdprobe: migrated ${result.count} annotations to schema v2 in ${path.basename(mdPath)} (backup: ${path.basename(result.backupPath)})`)
+        }
+      } catch (err) {
+        console.error(`mdprobe: failed to migrate ${yamlPath}: ${err.message}`)
+      }
+    }
+
     const content = await readFile(yamlPath, 'utf-8')
 
     let data
