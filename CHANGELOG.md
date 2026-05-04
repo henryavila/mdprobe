@@ -1,6 +1,26 @@
 # Changelog
 
-## [0.5.0] — 2026-04-29
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- _Pending entries for the next release will be added here._
+
+## [0.6.0] - 2026-04-29
+
+### Added
+- `mdprobe update` subcommand: detects your package manager (npm/pnpm/yarn/bun), prompts before stopping any running singleton, runs the install, and prints "What's new" from the local CHANGELOG.md after the upgrade. Supports `--yes`, `--dry-run`, and `--force` flags.
+- Update notifier banner via `update-notifier`. Discreet banner shown once per 24h when a newer version is on npm. Suppressed in CI, in pipes, in `--once`/`--json` mode, and during `update`/`stop`/`migrate`/`setup` subcommands. Opt out with `NO_UPDATE_NOTIFIER=1`.
+- Keep a Changelog discipline: `CHANGELOG.md` now ships in the npm tarball so post-update output reads release notes from the freshly-installed version (no GitHub API dependency).
+
+### Changed
+- All terminal output URLs use explicit `https://` prefix for OSC 8 / pattern-matching clickability in modern terminals (iTerm2, Windows Terminal, Kitty, WezTerm, GNOME Terminal, VS Code).
+
+## [0.5.0] - 2026-04-29
 
 ### Added
 - **Char-precise highlighting**: annotations are anchored by UTF-16 char offsets in the source markdown plus quote+context selectors. Cross-block selections render exactly the selected text — no more line expansion.
@@ -21,3 +41,7 @@
 
 ### Migration
 Existing `.annotations.yaml` files are upgraded automatically on first load. A `.bak` backup is saved alongside (e.g., `spec.md.annotations.yaml.bak`). To roll back, restore from the `.bak` file. Or run `npx mdprobe migrate <dir>` proactively.
+
+[Unreleased]: https://github.com/henryavila/mdprobe/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/henryavila/mdprobe/releases/tag/v0.6.0
+[0.5.0]: https://github.com/henryavila/mdprobe/releases/tag/v0.5.0
