@@ -80,7 +80,7 @@ describe('Drift banner layout (integration)', () => {
       action: 'add',
       data: {
         selectors: {
-          position: { startLine: 5, startColumn: 1, endLine: 5, endColumn: 17 },
+          range: { start: 22, end: 38 },
           quote: { exact: 'Original content', prefix: '', suffix: '' },
         },
         comment: 'Test annotation',
@@ -147,7 +147,7 @@ describe('Drift banner layout (integration)', () => {
       action: 'add',
       data: {
         selectors: {
-          position: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 40 },
+          range: { start: 15, end: 49 },
           quote: { exact: 'This exact text will be annotated.', prefix: '', suffix: '' },
         },
         comment: 'Test',
@@ -183,7 +183,7 @@ describe('Drift banner layout (integration)', () => {
       action: 'add',
       data: {
         selectors: {
-          position: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 20 },
+          range: { start: 14, end: 33 },
           quote: { exact: 'Original text here.', prefix: '', suffix: '' },
         },
         comment: 'Test',
@@ -219,7 +219,7 @@ describe('Drift banner layout (integration)', () => {
       action: 'add',
       data: {
         selectors: {
-          position: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 22 },
+          range: { start: 11, end: 31 },
           quote: { exact: 'Annotated text here.', prefix: '', suffix: '' },
         },
         comment: 'WS test',
@@ -305,7 +305,7 @@ describe('Drift banner layout (integration)', () => {
       action: 'add',
       data: {
         selectors: {
-          position: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 10 },
+          range: { start: 10, end: 20 },
           quote: { exact: 'Some text.', prefix: '', suffix: '' },
         },
         comment: 'Test',

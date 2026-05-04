@@ -1,6 +1,6 @@
 {
   "name": "@henryavila/mdprobe",
-  "version": "0.6.0",
+  "version": "0.5.0",
   "description": "Markdown viewer + reviewer for terminal/WSL with live reload, persistent annotations, and AI agent integration",
   "type": "module",
   "bin": {

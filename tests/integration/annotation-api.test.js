@@ -312,7 +312,15 @@ describe('GET /api/export', () => {
     await httpRequest(`${baseUrl}/api/annotations`, 'POST', {
       file: 'spec.md',
       action: 'add',
-      data: { selectors: { position: { startLine: 5 } }, comment: 'check this', tag: 'bug', author: 'Henry' },
+      data: {
+        selectors: {
+          range: { start: 16, end: 22 },
+          quote: { exact: '- Item', prefix: '', suffix: '' },
+        },
+        comment: 'check this',
+        tag: 'bug',
+        author: 'Henry',
+      },
     })
   })
 
