@@ -46,7 +46,7 @@ describe('precision: cross-block selection', () => {
     const sel = describeRange(range, root, source, mdast)
     const r = locate(sel, source, mdast)
     expect(r.state).toBe('confident')
-    const ranges = buildDomRanges(root, r.range.start, r.range.end)
+    const ranges = buildDomRanges(root, r.range.start, r.range.end, source)
     expect(ranges.length).toBeGreaterThanOrEqual(1)
     const text = ranges.map(rg => rg.toString()).join('|')
     expect(text).toContain('paragraph here.')
@@ -63,7 +63,7 @@ describe('precision: cross-block selection', () => {
 
     const sel = describeRange(range, root, source, mdast)
     const r = locate(sel, source, mdast)
-    const ranges = buildDomRanges(root, r.range.start, r.range.end)
+    const ranges = buildDomRanges(root, r.range.start, r.range.end, source)
     expect(ranges).toHaveLength(1)
     expect(ranges[0].toString()).toBe('First')
   })

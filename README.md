@@ -339,13 +339,76 @@ mdProbe ships as an npm package you can embed in your own server — no separate
 
 ## Development
 
+### Local install
+
 ```bash
 git clone https://github.com/henryavila/mdprobe.git
 cd mdprobe
 npm install
-npm run build:ui
-npm test
+npm run build:ui   # bundles the in-browser UI into dist/
 ```
+
+The UI bundle in `dist/` is required at runtime — the server serves it directly. Re-run `npm run build:ui` whenever you change anything under `src/ui/`.
+
+### Running your local checkout
+
+You can run the CLI from the repo without installing it globally:
+
+```bash
+# View a single file
+node bin/cli.js path/to/file.md
+
+# Pick a port, run in background, skip auto-open
+node bin/cli.js path/to/file.md --port 4000 -d --no-open
+
+# Stop the background server
+node bin/cli.js stop
+```
+
+If you want your local build to back the `mdprobe` command everywhere on your machine, link it:
+
+```bash
+npm link
+# now `mdprobe path/to/file.md` runs YOUR checkout
+# to undo:
+npm unlink -g @henryavila/mdprobe
+```
+
+For UI work, a Vite dev server is also available:
+
+```bash
+npm run dev:ui
+```
+
+### Testing
+
+```bash
+npm test                   # full Vitest suite (unit + integration), single run
+npm run test:watch         # re-run on file changes
+npm run test:unit          # unit only
+npm run test:integration   # integration only
+npm run test:coverage      # with coverage report
+npm run test:e2e           # Playwright end-to-end (needs `npx playwright install` once)
+```
+
+DOM-touching unit tests use `happy-dom` and live in `tests/unit/*.test.jsx`; everything else runs in plain Node. Tests render real markdown via `src/renderer.js` and assert against real DOM behaviour — keep new tests in that style rather than mocking out the renderer.
+
+### Contributing
+
+1. **Open an issue first** for non-trivial work — design questions, breaking API changes, anything bigger than a small bug fix. A quick "I'm planning to do X" comment saves rework.
+2. **Branch off `main`**, name it something descriptive (`fix/highlight-cross-inline`, `feat/section-approval-keybind`).
+3. **Write a failing test first** for any bug fix. Tests live next to the code they cover (`tests/unit/` for module-level, `tests/integration/` for cross-module flows). The existing tests show the preferred style: render real markdown, build a real DOM, then assert.
+4. **Run the full suite before opening a PR:**
+   ```bash
+   npm test
+   npm run build:ui   # make sure the UI bundle still builds
+   ```
+5. **Commit style**: Conventional Commits (`fix:`, `feat:`, `refactor:`, `docs:`, `test:`, `chore:`). Keep the subject under ~70 characters; expand in the body if needed.
+6. **PR description** should include:
+   - What changed and *why* (link the issue).
+   - How a reviewer can reproduce the original problem and verify the fix manually.
+   - Anything intentionally out of scope.
+7. **Don't commit build artifacts** — `dist/` is git-ignored except for the entry HTML; rebuilding shouldn't show up in `git status`.
 
 For project structure and architecture details see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

@@ -339,13 +339,76 @@ O mdProbe é distribuído como um pacote npm que você pode embutir no seu próp
 
 ## Desenvolvimento
 
+### Instalação local
+
 ```bash
 git clone https://github.com/henryavila/mdprobe.git
 cd mdprobe
 npm install
-npm run build:ui
-npm test
+npm run build:ui   # gera o bundle da UI em dist/
 ```
+
+O bundle em `dist/` é necessário em runtime — o servidor o serve diretamente. Rode `npm run build:ui` sempre que mexer em qualquer coisa sob `src/ui/`.
+
+### Rodando seu checkout local
+
+Você pode rodar o CLI a partir do repo sem instalar globalmente:
+
+```bash
+# Abrir um arquivo
+node bin/cli.js caminho/do/arquivo.md
+
+# Escolher porta, rodar em background, sem abrir o browser
+node bin/cli.js caminho/do/arquivo.md --port 4000 -d --no-open
+
+# Parar o servidor em background
+node bin/cli.js stop
+```
+
+Se quiser que o build local responda pelo comando `mdprobe` em qualquer lugar da máquina, faça link:
+
+```bash
+npm link
+# agora `mdprobe caminho/do/arquivo.md` usa SEU checkout
+# para desfazer:
+npm unlink -g @henryavila/mdprobe
+```
+
+Para trabalho na UI, também há um Vite dev server:
+
+```bash
+npm run dev:ui
+```
+
+### Testes
+
+```bash
+npm test                   # suíte Vitest completa (unit + integração), uma rodada
+npm run test:watch         # re-roda em cada alteração
+npm run test:unit          # só unit
+npm run test:integration   # só integração
+npm run test:coverage      # com relatório de cobertura
+npm run test:e2e           # Playwright end-to-end (precisa `npx playwright install` uma vez)
+```
+
+Testes unit que tocam DOM usam `happy-dom` e ficam em `tests/unit/*.test.jsx`; o resto roda em Node puro. Os testes renderizam markdown real via `src/renderer.js` e fazem asserções contra DOM real — siga esse estilo em vez de mockar o renderer.
+
+### Contribuindo
+
+1. **Abra uma issue primeiro** para trabalho não-trivial — questões de design, mudanças de API que quebram compatibilidade, qualquer coisa maior que um bug pequeno. Um comentário rápido "estou pensando em fazer X" economiza retrabalho.
+2. **Crie branch a partir de `main`** com nome descritivo (`fix/highlight-cross-inline`, `feat/section-approval-keybind`).
+3. **Escreva um teste que falha primeiro** para qualquer correção de bug. Testes ficam ao lado do código (`tests/unit/` para nível de módulo, `tests/integration/` para fluxos cross-módulo). Os testes existentes mostram o estilo preferido: renderizar markdown real, montar DOM real, então fazer asserções.
+4. **Rode a suíte completa antes do PR:**
+   ```bash
+   npm test
+   npm run build:ui   # garante que o bundle da UI ainda gera
+   ```
+5. **Estilo de commit**: Conventional Commits (`fix:`, `feat:`, `refactor:`, `docs:`, `test:`, `chore:`). Mantenha o título com até ~70 caracteres; detalhes no corpo, se necessário.
+6. **Descrição do PR** deve incluir:
+   - O que mudou e *por quê* (referencie a issue).
+   - Como reproduzir o problema original e validar o fix manualmente.
+   - O que está intencionalmente fora do escopo.
+7. **Não comite artefatos de build** — `dist/` é git-ignored com exceção do HTML de entrada; rebuild não deve aparecer no `git status`.
 
 Para estrutura do projeto e detalhes de arquitetura veja [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

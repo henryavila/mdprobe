@@ -63,7 +63,7 @@ export function createCssHighlightHighlighter() {
       removeOne(id)
       return r
     }
-    const ranges = buildDomRanges(contentEl, r.range.start, r.range.end)
+    const ranges = buildDomRanges(contentEl, r.range.start, r.range.end, source)
     if (ranges.length === 0) {
       removeOne(id)
       return { state: 'orphan', score: 0 }

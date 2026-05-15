@@ -53,15 +53,18 @@ describe('Popover', () => {
       expect(select).toBeNull()
     })
 
-    it('auto-focuses the comment textarea via useEffect (not autoFocus attribute)', () => {
+    it('auto-focuses the comment textarea via BOTH the HTML autofocus attribute and a deferred useEffect', () => {
       const { container } = render(<Popover {...defaultProps()} />)
 
       const textarea = container.querySelector('textarea')
       expect(textarea).not.toBeNull()
-      // Focus is set programmatically via useEffect, not via HTML autoFocus attribute
+      // The textarea ends up focused after mount.
       expect(document.activeElement).toBe(textarea)
-      // autoFocus attribute should NOT be present (it doesn't work for dynamic elements)
-      expect(textarea.hasAttribute('autofocus')).toBe(false)
+      // Belt-and-suspenders: the HTML `autofocus` attribute is also present
+      // so the browser focuses the element atomically with insertion. This
+      // matters for double-click → popover, where a stray click event fires
+      // AFTER our useEffect would otherwise have set focus, racing it.
+      expect(textarea.hasAttribute('autofocus')).toBe(true)
     })
   })
 
