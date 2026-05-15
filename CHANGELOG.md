@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - _Pending entries for the next release will be added here._
 
+## [0.5.1] - 2026-05-15
+
+### Fixed
+- **Highlight precision across inline elements.** Annotations whose selection crossed inline `<code>`, `<strong>`, `<em>` or `<a>` boundaries used to drift by the number of markdown-syntax characters in the path (backticks, asterisks, `[`). `describe()` and `buildDomRanges()` now share a DOM walker (`anchoring/v2/dom-source-map.js`) that tracks the rendered-text cursor and the source-offset cursor in lockstep, re-syncing at every element with `data-source-start`. Click-to-resolve uses the same walker.
+- **Dev-server cache staleness.** The HTML shell was read once at server import and served without a `Cache-Control` header. Rebuilding `dist/` while a server was still running left it referencing a bundle hash that no longer existed; browsers further cached the stale shell by heuristic, so bug fixes were invisible after rebuilds. The shell is now re-read on every request and sent with `Cache-Control: no-cache, no-store, must-revalidate`. Hashed asset paths keep their `immutable` cache header.
+- **Popover textarea focus after double-click.** Drag-select correctly focused the comment input, but double-click did not — the second `click` event of a dblclick fires after the popover opens and can blur a freshly-focused textarea. Defense in depth: HTML `autoFocus` (atomic with insertion) + synchronous `focus()` in `useEffect` + a deferred re-focus via `requestAnimationFrame`.
+
+### Changed
+- `dist/index.html` is no longer git-tracked. The file is still shipped via `package.json#files` (read from disk, not git), but rebuilds will no longer show up in `git status` and `git checkout` can no longer silently revert the bundle reference to a hash that has been overwritten on disk.
+- Playwright E2E config switched to full Chromium (`channel: 'chromium'`) so synthesized double-click word-snapping matches real-browser behavior.
+
+### Tests
+- 14 new automated checks covering all three fixes: unit specs on the DOM walker, an integration spec on cache headers + shell freshness, and Playwright specs that exercise real mouse gestures (double-click, drag-select, cross-block drag) against a fixture mirroring the original bug report. Each fix was validated by stashing it and confirming the corresponding tests fail without it.
+
 ## [0.5.0] - 2026-04-29
 
 ### Added
@@ -36,5 +50,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Migration
 Existing `.annotations.yaml` files are upgraded automatically on first load. A `.bak` backup is saved alongside (e.g., `spec.md.annotations.yaml.bak`). To roll back, restore from the `.bak` file. Or run `npx mdprobe migrate <dir>` proactively.
 
-[Unreleased]: https://github.com/henryavila/mdprobe/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/henryavila/mdprobe/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/henryavila/mdprobe/releases/tag/v0.5.1
 [0.5.0]: https://github.com/henryavila/mdprobe/releases/tag/v0.5.0
