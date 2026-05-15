@@ -206,7 +206,7 @@ export function Content({ annotationOps }) {
 
   // Click on annotation highlight -> select it (CSS Highlight API — no DOM marks)
   function handleContentClick(e) {
-    const ann = resolveClickedAnnotation(e, contentRef.current, annotations.value)
+    const ann = resolveClickedAnnotation(e, contentRef.current, annotations.value, currentSource.value)
     if (ann) {
       selectedAnnotationId.value = ann.id
     } else {

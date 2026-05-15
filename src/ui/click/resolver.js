@@ -1,6 +1,6 @@
 import { textOffsetWithinAncestor } from '../../anchoring/v2/index.js'
 
-export function resolveClickedAnnotation(event, contentEl, annotations) {
+export function resolveClickedAnnotation(event, contentEl, annotations, source) {
   if (event.target?.tagName === 'A' && (event.ctrlKey || event.metaKey)) {
     return null
   }
@@ -15,8 +15,12 @@ export function resolveClickedAnnotation(event, contentEl, annotations) {
   }
   if (!el || el === contentEl) return null
 
+  // `source` is required when the click target lives inside a marker-bearing
+  // block (`<li>`, `<h1>`-`<h6>`, `<blockquote>`) whose first child is plain
+  // text — without it `textOffsetWithinAncestor` cannot account for the
+  // leading source-only characters (the "- " of a list item, etc.).
   const sourceOffset = parseInt(el.dataset.sourceStart, 10) +
-    textOffsetWithinAncestor(el, pos.offsetNode, pos.offset)
+    textOffsetWithinAncestor(el, pos.offsetNode, pos.offset, source)
 
   const candidates = annotations.filter(a =>
     a.range && a.range.start <= sourceOffset && sourceOffset < a.range.end

@@ -210,6 +210,15 @@ function sendHTML(res, statusCode, html) {
   res.writeHead(statusCode, {
     'Content-Type': 'text/html; charset=utf-8',
     'Content-Length': Buffer.byteLength(html),
+    // The HTML shell embeds a hashed reference to the current JS bundle.
+    // Hashed assets ARE cached aggressively (see line ~973), so the shell
+    // itself must always revalidate — otherwise a rebuilt dist would be
+    // invisible to browsers that already have the old shell cached, and
+    // the user would keep seeing the previous bundle no matter how many
+    // times the dev rebuilds.
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
   })
   res.end(html)
 }
@@ -250,15 +259,32 @@ import { readFileSync, existsSync } from 'node:fs'
 const DIST_DIR = new URL('../dist', import.meta.url).pathname
 const DIST_INDEX = node_path.join(DIST_DIR, 'index.html')
 
-let SHELL_HTML
+// Fallback shell used when `dist/index.html` is missing entirely. The real
+// shell is re-read from disk on every shell request below via
+// `getShellHtml()`, so a fresh `npm run build:ui` is visible immediately
+// without restarting the server.
+let SHELL_FALLBACK
 try {
   if (existsSync(DIST_INDEX)) {
-    SHELL_HTML = readFileSync(DIST_INDEX, 'utf-8')
+    SHELL_FALLBACK = readFileSync(DIST_INDEX, 'utf-8')
   }
 } catch { /* fallback below */ }
 
-if (!SHELL_HTML) {
-  SHELL_HTML = `<!DOCTYPE html>
+function getShellHtml() {
+  // Always re-read from disk so that running `npm run build:ui` while a
+  // mdprobe server is still running makes the new bundle reachable on the
+  // next page load. Caching the file in memory at boot meant the server
+  // kept serving a stale `<script src="…hash…">` reference long after the
+  // bundle hash changed, hiding bug fixes behind ghost requests for files
+  // that no longer exist in dist/assets/.
+  try {
+    if (existsSync(DIST_INDEX)) return readFileSync(DIST_INDEX, 'utf-8')
+  } catch { /* fall through to in-memory fallback */ }
+  return SHELL_FALLBACK
+}
+
+if (!SHELL_FALLBACK) {
+  SHELL_FALLBACK = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -565,7 +591,7 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
 
       // GET /
       if (req.method === 'GET' && pathname === '/') {
-        return sendHTML(res, 200, SHELL_HTML)
+        return sendHTML(res, 200, getShellHtml())
       }
 
       // GET /api/files — deduplicate by basename (first occurrence wins)
@@ -995,7 +1021,7 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
       // SPA catch-all: serve HTML shell for any unmatched GET path
       // This enables deep linking — client reads pathname to auto-select file
       if (req.method === 'GET') {
-        return sendHTML(res, 200, SHELL_HTML)
+        return sendHTML(res, 200, getShellHtml())
       }
 
       // Fallback — 404

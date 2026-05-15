@@ -23,7 +23,20 @@ export function AnnotationForm({
 
   useEffect(() => {
     window.getSelection()?.removeAllRanges()
+    // Synchronous focus handles the drag-select path (drag does not emit a
+    // click event, so nothing else competes for focus).
     textareaRef.current?.focus()
+    // For double-click, the browser fires `click` events AFTER our mouseup
+    // handler shows the popover. Those click events can re-focus <body>
+    // and steal focus away from the textarea we just focused. Schedule a
+    // second focus attempt on the next animation frame, after all pending
+    // sync events from the originating gesture have settled.
+    const raf = requestAnimationFrame(() => {
+      if (textareaRef.current && document.activeElement !== textareaRef.current) {
+        textareaRef.current.focus()
+      }
+    })
+    return () => cancelAnimationFrame(raf)
   }, [])
 
   function handleSubmit(e) {
@@ -62,6 +75,7 @@ export function AnnotationForm({
 
       <textarea
         ref={textareaRef}
+        autoFocus
         value={comment}
         onInput={e => setComment(e.target.value)}
         placeholder={isReply ? 'Write a reply... (Ctrl+Enter to send)' : 'Add your comment... (Ctrl+Enter to save)'}

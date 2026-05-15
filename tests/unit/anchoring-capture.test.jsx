@@ -280,8 +280,11 @@ describe('describe', () => {
     const src = '## Per-annotation YAML\n\n```\n' + codeSource + '```\n'
     const sel = describeRange(range, root2, src, mdast2)
 
-    // start = 0 (h2 sourceStart) + 6 = 6
-    expect(sel.range.start).toBe(6)
+    // start = h2.dataSourceStart (0) + open-pad ("## " = 3 chars) + 6 = 9
+    // The "## " prefix lives in source but NOT in textContent, so the source
+    // offset for textContent[6] is 9 (the second "n" of "Per-annotation").
+    expect(sel.range.start).toBe(9)
+    expect(src.charAt(sel.range.start)).toBe('n')
 
     // end = 22 (code sourceStart) + char offset up to child index 2
     // = 22 + 'schema_version'.length + ': '.length = 22 + 14 + 2 = 38
