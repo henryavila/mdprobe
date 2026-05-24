@@ -1,12 +1,12 @@
 import fs from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import path from 'node:path'
-import { confirm, isCancel, intro, outro } from '@clack/prompts'
+import node_http from 'node:http'
 import { readLockFile, DEFAULT_LOCK_PATH, isProcessAlive } from '../singleton.js'
 import { createLogger } from '../telemetry.js'
 
 const tel = createLogger('stop')
+
+const SCAN_PORT_START = 3000
+const SCAN_PORT_END = 3010
 
 function formatAge(startedAtIso) {
   const ms = Date.now() - new Date(startedAtIso).getTime()
@@ -53,8 +53,41 @@ async function killProcess(pid) {
   return { killed: true }
 }
 
+function probePort(port, timeout = 1000) {
+  return new Promise((resolve) => {
+    const req = node_http.get(`http://127.0.0.1:${port}/api/status`, { timeout }, (res) => {
+      let data = ''
+      res.on('data', (chunk) => { data += chunk })
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data)
+          if (json.identity === 'mdprobe') {
+            resolve({ port, pid: json.pid, files: json.files || [], uptime: json.uptime })
+          } else {
+            resolve(null)
+          }
+        } catch {
+          resolve(null)
+        }
+      })
+    })
+    req.on('error', () => resolve(null))
+    req.on('timeout', () => { req.destroy(); resolve(null) })
+  })
+}
+
+async function scanForOrphans() {
+  const probes = []
+  for (let port = SCAN_PORT_START; port <= SCAN_PORT_END; port++) {
+    probes.push(probePort(port))
+  }
+  const results = await Promise.all(probes)
+  return results.filter(Boolean)
+}
+
 /**
  * Stop the running mdprobe singleton server.
+ * Falls back to port scanning when no lock file exists.
  * @param {object} opts
  * @param {boolean} [opts.force=false] - skip confirmation prompt
  * @param {string} [opts.lockPath] - custom lock file path
@@ -65,63 +98,87 @@ export async function runStop(opts = {}) {
 
   const lock = await readLockFile(lockPath)
 
-  if (!lock) {
-    tel.log('stop', { status: 'no_lock' })
-    console.log('mdprobe: nothing running (no lock file)')
-    return { stopped: false, reason: 'no-lock' }
-  }
+  if (lock) {
+    const alive = isProcessAlive(lock.pid)
 
-  const alive = isProcessAlive(lock.pid)
-
-  // Stale lock — clean up silently
-  if (!alive) {
-    try {
-      await fs.unlink(lockPath)
-    } catch { /* ignore ENOENT */ }
-    tel.log('stop', { status: 'stale_lock_cleaned', pid: lock.pid })
-    console.log(`mdprobe: removed stale lock (PID ${lock.pid} no longer running)`)
-    return { stopped: true, reason: 'stale-lock-cleaned', pid: lock.pid }
-  }
-
-  // Prompt for confirmation if not forced
-  if (!force) {
-    intro('mdprobe stop')
-    console.log(`  PID:   ${lock.pid}`)
-    console.log(`  Port:  ${lock.port}`)
-    console.log(`  URL:   ${lock.url}`)
-    console.log(`  Since: ${formatAge(lock.startedAt)}`)
-    console.log('')
-
-    const ok = await confirm({
-      message: 'Kill this process and clean the lock?',
-      initialValue: true,
-    })
-
-    if (isCancel(ok) || !ok) {
-      outro('Cancelled')
-      tel.log('stop', { status: 'user_cancelled', pid: lock.pid })
-      return { stopped: false, reason: 'cancelled' }
+    if (!alive) {
+      try { await fs.unlink(lockPath) } catch { /* ignore ENOENT */ }
+      tel.log('stop', { status: 'stale_lock_cleaned', pid: lock.pid })
+      console.log(`mdprobe: removed stale lock (PID ${lock.pid} no longer running)`)
+      // Fall through to port scan — orphan might be a different process
+    } else {
+      return await stopInstance({
+        pid: lock.pid, port: lock.port, url: lock.url,
+        startedAt: lock.startedAt, source: 'lock', force, lockPath,
+      })
     }
   }
 
-  // Kill the process
-  const result = await killProcess(lock.pid)
+  console.log(`mdprobe: no lock file, scanning ports ${SCAN_PORT_START}–${SCAN_PORT_END}...`)
+  const orphans = await scanForOrphans()
 
-  // Always clean the lock file
-  try {
-    await fs.unlink(lockPath)
-  } catch { /* ignore ENOENT */ }
-
-  if (result.killed) {
-    tel.log('stop', { status: 'killed', pid: lock.pid })
-    console.log(`mdprobe: stopped PID ${lock.pid}`)
-    return { stopped: true, pid: lock.pid }
-  } else if (result.reason === 'permission-denied') {
-    tel.log('stop', { status: 'permission_denied', pid: lock.pid })
-    console.error(`mdprobe: cannot kill PID ${lock.pid} (permission denied)`)
-    return { stopped: false, reason: 'permission-denied', pid: lock.pid }
+  if (orphans.length === 0) {
+    tel.log('stop', { status: 'nothing_found', scanned: true })
+    console.log('mdprobe: no running instances found')
+    return { stopped: false, reason: 'no-lock' }
   }
 
-  tel.log('stop', { status: result.reason, pid: lock.pid })
-  return { stopped: false, reason: result.reason, pid: lock.pid }
+  let stoppedCount = 0
+  for (const orphan of orphans) {
+    const result = await stopInstance({
+      pid: orphan.pid, port: orphan.port,
+      url: `http://127.0.0.1:${orphan.port}`,
+      files: orphan.files, uptime: orphan.uptime,
+      source: 'scan', force, lockPath: null,
+    })
+    if (result.stopped) stoppedCount++
+  }
+
+  return {
+    stopped: stoppedCount > 0,
+    reason: stoppedCount > 0 ? 'scan-killed' : 'scan-cancelled',
+  }
+}
+
+async function stopInstance({ pid, port, url, startedAt, files, uptime, source, force, lockPath }) {
+  if (!force) {
+    console.log('')
+    console.log(`  Found mdprobe${source === 'scan' ? ' (orphan — no lock file)' : ''}:`)
+    console.log(`  PID:   ${pid}`)
+    console.log(`  Port:  ${port}`)
+    if (url) console.log(`  URL:   ${url}`)
+    if (startedAt) console.log(`  Since: ${formatAge(startedAt)}`)
+    if (uptime != null) console.log(`  Uptime: ${Math.floor(uptime / 60)} min`)
+    if (files?.length) console.log(`  Files: ${files.join(', ')}`)
+    console.log('')
+
+    if (process.stdin.isTTY) {
+      const { confirm, isCancel } = await import('@clack/prompts')
+      const ok = await confirm({ message: 'Kill this process?', initialValue: true })
+      if (isCancel(ok) || !ok) {
+        tel.log('stop', { status: 'user_cancelled', pid })
+        console.log('Cancelled')
+        return { stopped: false, reason: 'cancelled', pid }
+      }
+    }
+  }
+
+  const result = await killProcess(pid)
+
+  if (lockPath) {
+    try { await fs.unlink(lockPath) } catch { /* ignore ENOENT */ }
+  }
+
+  if (result.killed) {
+    tel.log('stop', { status: 'killed', pid, source })
+    console.log(`mdprobe: stopped PID ${pid} (port ${port})`)
+    return { stopped: true, pid }
+  } else if (result.reason === 'permission-denied') {
+    tel.log('stop', { status: 'permission_denied', pid })
+    console.error(`mdprobe: cannot kill PID ${pid} (permission denied)`)
+    return { stopped: false, reason: 'permission-denied', pid }
+  }
+
+  tel.log('stop', { status: result.reason, pid })
+  return { stopped: false, reason: result.reason, pid }
 }

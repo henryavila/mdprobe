@@ -9,7 +9,7 @@ import { openBrowser } from './open-browser.js'
 import { AnnotationFile } from './annotations.js'
 import { getConfig } from './config.js'
 import { hashContent } from './hash.js'
-import { discoverExistingServer, joinExistingServer, writeLockFile, computeBuildHash } from './singleton.js'
+import { discoverExistingServer, joinExistingServer, writeLockFile, computeBuildHash, pingServer } from './singleton.js'
 import { createLogger } from './telemetry.js'
 import node_http from 'node:http'
 const tel = createLogger('mcp')
@@ -33,6 +33,15 @@ function broadcastToRemote(serverUrl, msg) {
 }
 
 async function getOrCreateServer(port = 3000) {
+  if (httpServerPromise) {
+    const srv = await httpServerPromise
+    const { alive } = await pingServer(srv.url)
+    if (!alive) {
+      tel.log('server_stale', { url: srv.url, port: srv.port })
+      httpServerPromise = null
+    }
+  }
+
   if (!httpServerPromise) {
     const buildHash = await computeBuildHash()
 
