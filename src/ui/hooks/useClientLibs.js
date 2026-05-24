@@ -63,10 +63,6 @@ async function initMermaid(elements) {
       startOnLoad: false,
       theme: isDark ? 'dark' : 'default',
     })
-    // Mermaid 11+ uses run() with nodes
-    for (const el of elements) {
-      el.setAttribute('data-processed', 'true')
-    }
     await window.mermaid.run({ nodes: [...elements] })
   } catch (err) {
     console.warn('mdProbe: Mermaid rendering failed', err)
