@@ -19,7 +19,7 @@ Output files live in the repo root and are referenced by the README.
 
 ## Required screenshots
 
-### screenshot-hero.png
+### docs/images/screenshot-hero.png
 
 **Purpose:** README hero — full app synthesis shot showing the core review workflow.
 
@@ -41,12 +41,12 @@ Or manually:
 await page.goto('http://localhost:4173/?file=demo.md')
 // open panel if not already open
 await page.click('[data-testid="panel-toggle"]')
-await page.screenshot({ path: 'screenshot-hero.png', clip: { x: 0, y: 0, width: 1280, height: 720 } })
+await page.screenshot({ path: 'docs/images/screenshot-hero.png', clip: { x: 0, y: 0, width: 1280, height: 720 } })
 ```
 
 ---
 
-### screenshot-highlight-inline.png
+### docs/images/screenshot-highlight-inline.png
 
 **Purpose:** Demonstrate character-precise inline highlights within paragraphs.
 
@@ -62,12 +62,12 @@ await page.screenshot({ path: 'screenshot-hero.png', clip: { x: 0, y: 0, width: 
 await page.goto('http://localhost:4173/?file=demo.md')
 const authHeading = page.locator('h3', { hasText: 'Authentication' })
 await authHeading.scrollIntoViewIfNeeded()
-await page.screenshot({ path: 'screenshot-highlight-inline.png', clip: { x: 0, y: 0, width: 1280, height: 720 } })
+await page.screenshot({ path: 'docs/images/screenshot-highlight-inline.png', clip: { x: 0, y: 0, width: 1280, height: 720 } })
 ```
 
 ---
 
-### screenshot-cross-block.png
+### docs/images/screenshot-cross-block.png
 
 **Purpose:** Show cross-block annotation spanning a heading and a code block (precision fix).
 
@@ -83,12 +83,12 @@ await page.screenshot({ path: 'screenshot-highlight-inline.png', clip: { x: 0, y
 await page.goto('http://localhost:4173/?file=demo.md')
 const apiHeading = page.locator('h2', { hasText: 'API' })
 await apiHeading.scrollIntoViewIfNeeded()
-await page.screenshot({ path: 'screenshot-cross-block.png', clip: { x: 0, y: 0, width: 1280, height: 720 } })
+await page.screenshot({ path: 'docs/images/screenshot-cross-block.png', clip: { x: 0, y: 0, width: 1280, height: 720 } })
 ```
 
 ---
 
-### screenshot-annotation-panel.png
+### docs/images/screenshot-annotation-panel.png
 
 **Purpose:** Show the annotation side panel with tag badges, reply thread, and action buttons.
 
@@ -106,12 +106,12 @@ await page.goto('http://localhost:4173/?file=demo.md')
 await page.click('[data-testid="panel-toggle"]')
 // expand thread
 await page.click('[data-annotation-id="a1b2c3d4"] [data-testid="expand-replies"]')
-await page.screenshot({ path: 'screenshot-annotation-panel.png', clip: { x: 0, y: 0, width: 1280, height: 720 } })
+await page.screenshot({ path: 'docs/images/screenshot-annotation-panel.png', clip: { x: 0, y: 0, width: 1280, height: 720 } })
 ```
 
 ---
 
-### screenshot-drift-banner.png
+### docs/images/screenshot-drift-banner.png
 
 **Purpose:** Show the drift warning banner when an annotation cannot be located.
 
@@ -129,12 +129,12 @@ with the same annotations file confirms the drift because the Math section text 
 ```js
 await page.goto('http://localhost:4173/?file=demo-edited.md&annotations=demo.annotations.yaml')
 await page.waitForSelector('[data-testid="drift-banner"]')
-await page.screenshot({ path: 'screenshot-drift-banner.png', clip: { x: 0, y: 0, width: 1280, height: 720 } })
+await page.screenshot({ path: 'docs/images/screenshot-drift-banner.png', clip: { x: 0, y: 0, width: 1280, height: 720 } })
 ```
 
 ---
 
-### screenshot-once-review.png
+### docs/images/screenshot-once-review.png
 
 **Purpose:** Demonstrate the `--once` flag single-file review mode (CLI usage).
 
@@ -152,7 +152,7 @@ node dist/cli.js --once tests/fixtures/demo.md &
 
 # Then in Playwright:
 await page.goto('http://localhost:4173/')
-await page.screenshot({ path: 'screenshot-once-review.png', clip: { x: 0, y: 0, width: 1280, height: 720 } })
+await page.screenshot({ path: 'docs/images/screenshot-once-review.png', clip: { x: 0, y: 0, width: 1280, height: 720 } })
 ```
 
 ---
@@ -177,30 +177,30 @@ test.beforeEach(async ({ page }) => {
 test('hero', async ({ page }) => {
   await page.goto(`${BASE}/?file=demo.md`)
   await page.click('[data-testid="panel-toggle"]')
-  await page.screenshot({ path: 'screenshot-hero.png' })
+  await page.screenshot({ path: 'docs/images/screenshot-hero.png' })
 })
 
 test('highlight-inline', async ({ page }) => {
   await page.goto(`${BASE}/?file=demo.md`)
   await page.locator('h3', { hasText: 'Authentication' }).scrollIntoViewIfNeeded()
-  await page.screenshot({ path: 'screenshot-highlight-inline.png' })
+  await page.screenshot({ path: 'docs/images/screenshot-highlight-inline.png' })
 })
 
 test('cross-block', async ({ page }) => {
   await page.goto(`${BASE}/?file=demo.md`)
   await page.locator('h2', { hasText: 'API' }).scrollIntoViewIfNeeded()
-  await page.screenshot({ path: 'screenshot-cross-block.png' })
+  await page.screenshot({ path: 'docs/images/screenshot-cross-block.png' })
 })
 
 test('annotation-panel', async ({ page }) => {
   await page.goto(`${BASE}/?file=demo.md`)
   await page.click('[data-testid="panel-toggle"]')
-  await page.screenshot({ path: 'screenshot-annotation-panel.png' })
+  await page.screenshot({ path: 'docs/images/screenshot-annotation-panel.png' })
 })
 
 test('drift-banner', async ({ page }) => {
   await page.goto(`${BASE}/?file=demo-edited.md&annotations=demo.annotations.yaml`)
   await page.waitForSelector('[data-testid="drift-banner"]')
-  await page.screenshot({ path: 'screenshot-drift-banner.png' })
+  await page.screenshot({ path: 'docs/images/screenshot-drift-banner.png' })
 })
 ```

@@ -156,10 +156,10 @@ async function captureAll() {
   try {
 
     // -----------------------------------------------------------------------
-    // 1. screenshot-hero.png
+    // 1. docs/images/screenshot-hero.png
     //    Full app, both panels open, scrolled to Authentication (anns 1 + 5)
     // -----------------------------------------------------------------------
-    console.log('[1/6] screenshot-hero.png (1920x1080)...')
+    console.log('[1/6] docs/images/screenshot-hero.png (1920x1080)...')
     {
       const page = await browser1.newPage({ viewport: { width: 1920, height: 1080 } })
       await page.goto(ctx1.url)
@@ -180,16 +180,16 @@ async function captureAll() {
       // Scroll content to Authentication section
       await scrollToHeading(page, 'h3', 'Authentication')
 
-      await page.screenshot({ path: join(repoRoot, 'screenshot-hero.png'), fullPage: false })
+      await page.screenshot({ path: join(repoRoot, 'docs/images/screenshot-hero.png'), fullPage: false })
       await page.close()
-      console.log('  ✓ screenshot-hero.png')
+      console.log('  ✓ docs/images/screenshot-hero.png')
     }
 
     // -----------------------------------------------------------------------
-    // 2. screenshot-highlight-inline.png
+    // 2. docs/images/screenshot-highlight-inline.png
     //    Authentication section, both panels collapsed (focus mode)
     // -----------------------------------------------------------------------
-    console.log('[2/6] screenshot-highlight-inline.png (1280x720)...')
+    console.log('[2/6] docs/images/screenshot-highlight-inline.png (1280x720)...')
     {
       const page = await browser1.newPage({ viewport: { width: 1280, height: 720 } })
       await page.goto(ctx1.url)
@@ -207,16 +207,16 @@ async function captureAll() {
       // Scroll to Authentication to show annotations 1 and 5 (overlapping highlights)
       await scrollToHeading(page, 'h3', 'Authentication')
 
-      await page.screenshot({ path: join(repoRoot, 'screenshot-highlight-inline.png'), fullPage: false })
+      await page.screenshot({ path: join(repoRoot, 'docs/images/screenshot-highlight-inline.png'), fullPage: false })
       await page.close()
-      console.log('  ✓ screenshot-highlight-inline.png')
+      console.log('  ✓ docs/images/screenshot-highlight-inline.png')
     }
 
     // -----------------------------------------------------------------------
-    // 3. screenshot-cross-block.png
+    // 3. docs/images/screenshot-cross-block.png
     //    API / Create task section: heading + code block, no panels
     // -----------------------------------------------------------------------
-    console.log('[3/6] screenshot-cross-block.png (1280x720)...')
+    console.log('[3/6] docs/images/screenshot-cross-block.png (1280x720)...')
     {
       const page = await browser1.newPage({ viewport: { width: 1280, height: 720 } })
       await page.goto(ctx1.url)
@@ -236,19 +236,19 @@ async function captureAll() {
       // Use 'center' so both the heading AND the first code line are in frame.
       await scrollToHeading(page, 'h3', 'Create task', 'center')
 
-      await page.screenshot({ path: join(repoRoot, 'screenshot-cross-block.png'), fullPage: false })
+      await page.screenshot({ path: join(repoRoot, 'docs/images/screenshot-cross-block.png'), fullPage: false })
       await page.close()
-      console.log('  ✓ screenshot-cross-block.png')
+      console.log('  ✓ docs/images/screenshot-cross-block.png')
     }
 
     // -----------------------------------------------------------------------
-    // 4. screenshot-overlap.png
+    // 4. docs/images/screenshot-overlap.png
     //    Tight zoom into the overlapping "expire after 24 hours" text —
     //    annotation 1 (question, 865-935) + annotation 5 (bug, 909-935)
     //    both cover this phrase, so alpha-blending of two different tag
     //    colors is visible here.
     // -----------------------------------------------------------------------
-    console.log('[4/6] screenshot-overlap.png (1280x720)...')
+    console.log('[4/6] docs/images/screenshot-overlap.png (1280x720)...')
     {
       const page = await browser1.newPage({ viewport: { width: 1280, height: 720 } })
       await page.goto(ctx1.url)
@@ -294,16 +294,16 @@ async function captureAll() {
       if (clipRect) {
         console.log(`  clip rect: ${JSON.stringify(clipRect)}`)
         await page.screenshot({
-          path: join(repoRoot, 'screenshot-overlap.png'),
+          path: join(repoRoot, 'docs/images/screenshot-overlap.png'),
           clip: clipRect,
           fullPage: false,
         })
       } else {
         console.warn('  [warn] Could not find "expire after" text node — falling back to full page')
-        await page.screenshot({ path: join(repoRoot, 'screenshot-overlap.png'), fullPage: false })
+        await page.screenshot({ path: join(repoRoot, 'docs/images/screenshot-overlap.png'), fullPage: false })
       }
       await page.close()
-      console.log('  ✓ screenshot-overlap.png')
+      console.log('  ✓ docs/images/screenshot-overlap.png')
     }
 
   } finally {
@@ -337,11 +337,11 @@ async function captureAll() {
   try {
 
     // -----------------------------------------------------------------------
-    // 5. screenshot-drifted.png
+    // 5. docs/images/screenshot-drifted.png
     //    Both panels open, right panel shows Drifted section,
     //    content scrolled to Math section
     // -----------------------------------------------------------------------
-    console.log('[5/6] screenshot-drifted.png (1920x1080)...')
+    console.log('[5/6] docs/images/screenshot-drifted.png (1920x1080)...')
     {
       const page = await browser2.newPage({ viewport: { width: 1920, height: 1080 } })
       await page.goto(serverDrifted.url)
@@ -373,9 +373,9 @@ async function captureAll() {
       // Scroll content to Math section — annotation f6a7b8c9 lives here
       await scrollToHeading(page, 'h2', 'Math')
 
-      await page.screenshot({ path: join(repoRoot, 'screenshot-drifted.png'), fullPage: false })
+      await page.screenshot({ path: join(repoRoot, 'docs/images/screenshot-drifted.png'), fullPage: false })
       await page.close()
-      console.log('  ✓ screenshot-drifted.png')
+      console.log('  ✓ docs/images/screenshot-drifted.png')
     }
 
   } finally {
@@ -409,10 +409,10 @@ async function captureAll() {
   try {
 
     // -----------------------------------------------------------------------
-    // 6. screenshot-once-review.png
+    // 6. docs/images/screenshot-once-review.png
     //    Full app, --once mode, "Finish Review" button visible in header
     // -----------------------------------------------------------------------
-    console.log('[6/6] screenshot-once-review.png (1920x1080)...')
+    console.log('[6/6] docs/images/screenshot-once-review.png (1920x1080)...')
     {
       const page = await browser3.newPage({ viewport: { width: 1920, height: 1080 } })
       await page.goto(serverOnce.url)
@@ -437,9 +437,9 @@ async function captureAll() {
       // Scroll to Authentication section so highlights are visible
       await scrollToHeading(page, 'h3', 'Authentication')
 
-      await page.screenshot({ path: join(repoRoot, 'screenshot-once-review.png'), fullPage: false })
+      await page.screenshot({ path: join(repoRoot, 'docs/images/screenshot-once-review.png'), fullPage: false })
       await page.close()
-      console.log('  ✓ screenshot-once-review.png')
+      console.log('  ✓ docs/images/screenshot-once-review.png')
     }
 
   } finally {
@@ -454,12 +454,12 @@ async function captureAll() {
   // =========================================================================
   console.log('\n=== Screenshot capture complete ===\n')
   const outputFiles = [
-    'screenshot-hero.png',
-    'screenshot-highlight-inline.png',
-    'screenshot-cross-block.png',
-    'screenshot-overlap.png',
-    'screenshot-drifted.png',
-    'screenshot-once-review.png',
+    'docs/images/screenshot-hero.png',
+    'docs/images/screenshot-highlight-inline.png',
+    'docs/images/screenshot-cross-block.png',
+    'docs/images/screenshot-overlap.png',
+    'docs/images/screenshot-drifted.png',
+    'docs/images/screenshot-once-review.png',
   ]
   for (const f of outputFiles) {
     const fp = join(repoRoot, f)

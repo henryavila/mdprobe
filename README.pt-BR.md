@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="screenshot-hero.png" alt="Interface completa do mdProbe com anotações e destaques inline" />
+  <img src="docs/images/screenshot-hero.png" alt="Interface completa do mdProbe com anotações e destaques inline" />
 </p>
 
 # mdProbe
@@ -52,7 +52,7 @@ npx @henryavila/mdprobe README.md
 
 Selecione qualquer texto no browser, escolha uma tag, escreva um comentário e salve.
 
-![Anotação atravessando blocos: destaque cobre cabeçalho e primeira linha do código](screenshot-cross-block.png)
+![Anotação atravessando blocos: destaque cobre cabeçalho e primeira linha do código](docs/images/screenshot-cross-block.png)
 
 | Tag | Significado |
 |-----|-------------|
@@ -103,7 +103,7 @@ mdprobe stop                # Mata o servidor e limpa o lock file
 mdprobe spec.md --once
 ```
 
-![Modo blocking review com botão Finish Review](screenshot-once-review.png)
+![Modo blocking review com botão Finish Review](docs/images/screenshot-once-review.png)
 
 Bloqueia o processo até que você clique em **"Finish Review"** na interface. Encerra com a lista dos arquivos de anotação criados — útil para pipelines que precisam de aprovação humana antes de continuar. `--once` sempre cria uma instância de servidor isolada (não entra no singleton).
 
@@ -177,13 +177,13 @@ Quando o arquivo fonte muda após as anotações serem criadas, o mdProbe execut
 
 Anotações `drifted` exibem sublinhado tracejado âmbar e requerem sua confirmação explícita (`acceptDrift`) antes de serem reancorádas como `open`. Anotações `orphan` aparecem em uma seção dedicada do painel sem destaque inline.
 
-![Anotação em estado drifted com sublinhado tracejado âmbar + painel de drift](screenshot-drifted.png)
+![Anotação em estado drifted com sublinhado tracejado âmbar + painel de drift](docs/images/screenshot-drifted.png)
 
 ### Destaque com Precisão de Caractere
 
 A v0.5.0 usa a **CSS Custom Highlight API** (zero mutação de DOM) para renderizar marcas de anotação. As seleções são ancoradas por offsets de caractere UTF-16 no fonte Markdown bruto, não por números de linha/coluna — portanto seleções entre blocos, código reformatado e edições de quebra de parágrafo não quebram as âncoras silenciosamente.
 
-![Destaques inline com cores semânticas por tag](screenshot-highlight-inline.png)
+![Destaques inline com cores semânticas por tag](docs/images/screenshot-highlight-inline.png)
 
 ### Temas
 
@@ -254,7 +254,7 @@ Subcommands:
 ## Integração com Agentes de IA
 
 <p align="center">
-  <img src="screenshot-hero.png" alt="Interface completa do mdProbe com anotações e destaques inline" />
+  <img src="docs/images/screenshot-hero.png" alt="Interface completa do mdProbe com anotações e destaques inline" />
 </p>
 
 O mdProbe inclui um servidor MCP e um `SKILL.md` que ensina agentes de IA o workflow de revisão. Isso viabiliza um ciclo bidirecional: o agente escreve Markdown, o humano anota, o agente lê o feedback e o resolve.

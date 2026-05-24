@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="screenshot-hero.png" alt="mdProbe full interface with annotations and inline highlights" />
+  <img src="docs/images/screenshot-hero.png" alt="mdProbe full interface with annotations and inline highlights" />
 </p>
 
 # mdProbe
@@ -52,7 +52,7 @@ npx @henryavila/mdprobe README.md
 
 Select any text in the browser, choose a tag, write a comment, and save.
 
-![Cross-block annotation: highlight spans heading and first line of code block](screenshot-cross-block.png)
+![Cross-block annotation: highlight spans heading and first line of code block](docs/images/screenshot-cross-block.png)
 
 | Tag | Meaning |
 |-----|---------|
@@ -103,7 +103,7 @@ mdprobe stop                # Kill the server and clean the lock file
 mdprobe spec.md --once
 ```
 
-![Blocking review session with Finish Review button](screenshot-once-review.png)
+![Blocking review session with Finish Review button](docs/images/screenshot-once-review.png)
 
 Blocks the process until you click **"Finish Review"** in the UI. Exits with the list of created annotation files — useful for pipelines that need human sign-off before continuing. `--once` always creates an isolated server instance (does not join the singleton).
 
@@ -177,13 +177,13 @@ When the source file changes after annotations were created, mdProbe runs a 5-st
 
 `drifted` annotations show a dashed amber underline and require your explicit confirmation (`acceptDrift`) before being re-anchored as `open`. `orphan` annotations appear in a dedicated panel section without inline highlight.
 
-![Drifted annotation with dashed amber underline + Drifted panel section](screenshot-drifted.png)
+![Drifted annotation with dashed amber underline + Drifted panel section](docs/images/screenshot-drifted.png)
 
 ### Char-precise Highlighting
 
 v0.5.0 uses the **CSS Custom Highlight API** (zero DOM mutation) to render annotation marks. Selections are anchored by UTF-16 character offsets in the raw Markdown source, not by line/column numbers — so cross-block selections, reformatted code, and paragraph-wrapping edits don't break anchors silently.
 
-![Inline highlights with semantic tag colors](screenshot-highlight-inline.png)
+![Inline highlights with semantic tag colors](docs/images/screenshot-highlight-inline.png)
 
 ### Themes
 
@@ -254,7 +254,7 @@ Subcommands:
 ## AI Agent Integration
 
 <p align="center">
-  <img src="screenshot-hero.png" alt="mdProbe full interface with annotations and inline highlights" />
+  <img src="docs/images/screenshot-hero.png" alt="mdProbe full interface with annotations and inline highlights" />
 </p>
 
 mdProbe includes an MCP server and a `SKILL.md` that teaches AI agents the review workflow. This enables a two-way loop: the agent writes Markdown, the human annotates, the agent reads feedback and resolves it.
