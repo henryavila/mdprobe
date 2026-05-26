@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - _Pending entries for the next release will be added here._
 
+## [0.5.2] - 2026-05-26
+
+### Fixed
+- **Mermaid diagrams silently skipped.** `initMermaid` set `data-processed="true"` on every `<pre class="mermaid">` element before calling `mermaid.run()`. Mermaid v11 checks this attribute internally and skips already-processed nodes, so no diagram ever rendered. Removed the premature attribute — Mermaid now manages it after successful SVG injection.
+- **MCP stale server reuse.** `getOrCreateServer` cached the server promise without re-checking liveness. If the singleton was killed externally, the MCP kept returning a dead URL. It now pings the cached server before reuse and recovers automatically.
+- **`mdprobe stop` orphan detection.** When no lock file exists, `stop` now scans ports 3000–3010 via `/api/status` to find and kill orphaned server instances instead of silently reporting "no server running."
+
 ## [0.5.1] - 2026-05-15
 
 ### Fixed
