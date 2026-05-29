@@ -98,11 +98,14 @@ export async function runStop(opts = {}) {
 
   const lock = await readLockFile(lockPath)
 
+  let staleCleanedPid = null
+
   if (lock) {
     const alive = isProcessAlive(lock.pid)
 
     if (!alive) {
       try { await fs.unlink(lockPath) } catch { /* ignore ENOENT */ }
+      staleCleanedPid = lock.pid
       tel.log('stop', { status: 'stale_lock_cleaned', pid: lock.pid })
       console.log(`mdprobe: removed stale lock (PID ${lock.pid} no longer running)`)
       // Fall through to port scan — orphan might be a different process
@@ -118,6 +121,9 @@ export async function runStop(opts = {}) {
   const orphans = await scanForOrphans()
 
   if (orphans.length === 0) {
+    if (staleCleanedPid != null) {
+      return { stopped: true, reason: 'stale-lock-cleaned', pid: staleCleanedPid }
+    }
     tel.log('stop', { status: 'nothing_found', scanned: true })
     console.log('mdprobe: no running instances found')
     return { stopped: false, reason: 'no-lock' }

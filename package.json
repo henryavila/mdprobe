@@ -31,6 +31,7 @@
     "test:e2e": "playwright test",
     "build:ui": "vite build",
     "dev:ui": "vite dev",
+    "prepare": "git config core.hooksPath githooks || true",
     "postinstall": "node scripts/postinstall.js"
   },
   "dependencies": {

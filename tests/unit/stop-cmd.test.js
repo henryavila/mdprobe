@@ -3,6 +3,26 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { spawn } from 'node:child_process'
+
+// Isolate these unit tests from the network: the real port scanner probes
+// ports 3000–3010, which other test files (integration servers) may bind
+// when vitest runs files in parallel — causing flaky "orphan found" results.
+// No test in this file exercises the orphan-found path, so make every probe
+// fail fast and deterministically.
+vi.mock('node:http', () => {
+  const get = () => {
+    const req = {
+      on(event, cb) {
+        if (event === 'error') queueMicrotask(() => cb(new Error('mocked: no server')))
+        return req
+      },
+      destroy() {},
+    }
+    return req
+  }
+  return { default: { get }, get }
+})
+
 import { runStop } from '../../src/cli/stop-cmd.js'
 import { DEFAULT_LOCK_PATH } from '../../src/singleton.js'
 

@@ -1,0 +1,23 @@
+#!/bin/sh
+#
+# pre-push hook: run the full test suite before allowing a push.
+# A push is aborted if any test fails.
+#
+# This hook is version-controlled in githooks/ and activated automatically
+# via the "prepare" script in package.json (sets core.hooksPath=githooks).
+# To bypass in an emergency: git push --no-verify
+
+echo "pre-push: running test suite (npm test)..."
+
+npm test
+status=$?
+
+if [ "$status" -ne 0 ]; then
+  echo ""
+  echo "pre-push: ✗ tests failed — push aborted."
+  echo "pre-push: fix the failing tests, or bypass with 'git push --no-verify' (not recommended)."
+  exit 1
+fi
+
+echo "pre-push: ✓ all tests passed — proceeding with push."
+exit 0
