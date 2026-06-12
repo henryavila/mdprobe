@@ -262,6 +262,24 @@ Cloudflare deve ser tratado como provider de hostname estável:
 - Toda URL remota deve ser propagada como metadado separado da URL local.
 - Docs devem deixar claro que o conteúdo dos arquivos e as annotations podem ser expostos.
 
+### Control-plane gate (implementado)
+
+mdProbe não tem autenticação própria (e isso continua fora de escopo). Enquanto o bind era
+loopback-only, os endpoints de mutação eram acessíveis apenas localmente. Como a exposição remota
+torna o server alcançável por outros hosts, os endpoints que **alteram quais arquivos do host o server
+lê** ficam restritos ao loopback quando `expose !== "off"`:
+
+- `POST /api/add-files` e `POST /api/broadcast` exigem origem loopback (singleton join local continua
+  funcionando; cliente remoto recebe `403`).
+- Leitura, annotations e `remove-file` permanecem abertos — é o fluxo de revisão remota pretendido.
+  `remove-file` só altera o conjunto em memória (sem deletar do disco), então não habilita LFI.
+- `allowPublicUnauthenticated: true` desativa essa restrição explicitamente (opt-in), e nesse caso o
+  provider emite warning/`exposeRisk`.
+
+Sem esse gate, um cliente remoto poderia usar `add-files` com caminho arbitrário e então ler arquivos
+do host via `GET /api/asset`/`/api/source` (leitura arbitrária de arquivos). O gate fecha essa cadeia
+no modo exposto sem opt-in.
+
 ## Touchpoints no código
 
 | Arquivo | Mudança |

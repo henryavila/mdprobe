@@ -300,6 +300,33 @@ if (!SHELL_FALLBACK) {
 </html>`
 }
 
+/**
+ * Whether a request originates from the local host (loopback).
+ * @param {import('node:http').IncomingMessage} req
+ * @returns {boolean}
+ */
+export function isLoopbackRequest(req) {
+  const addr = req?.socket?.remoteAddress ?? ''
+  return addr === '' || addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1'
+}
+
+/**
+ * Control-plane endpoints (add/remove files, broadcast) mutate which host files
+ * the server reads from. When the server is exposed to the network, restrict
+ * these to localhost so a remote client cannot register arbitrary host paths.
+ * Opt out explicitly with allowPublicUnauthenticated.
+ *
+ * @param {import('node:http').IncomingMessage} req
+ * @param {object|null} remoteAccess - current exposure metadata
+ * @returns {boolean}
+ */
+export function isControlPlaneAllowed(req, remoteAccess) {
+  const exposed = remoteAccess && remoteAccess.expose && remoteAccess.expose !== 'off'
+  if (!exposed) return true
+  if (remoteAccess.allowPublicUnauthenticated) return true
+  return isLoopbackRequest(req)
+}
+
 function buildRemoteStatus(remoteAccess, resolvedFiles) {
   if (!remoteAccess) return {}
 
@@ -905,6 +932,9 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
 
       // POST /api/add-files — add files from another process (singleton join)
       if (req.method === 'POST' && pathname === '/api/add-files') {
+        if (!isControlPlaneAllowed(req, getRemoteAccess?.())) {
+          return sendJSON(res, 403, { error: 'forbidden: adding files is restricted to localhost while exposed' })
+        }
         const body = await readBody(req)
         const { files: newFiles } = body
         if (!Array.isArray(newFiles) || newFiles.length === 0) {
@@ -922,6 +952,9 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
 
       // POST /api/broadcast — forward a WebSocket broadcast from a remote MCP process
       if (req.method === 'POST' && pathname === '/api/broadcast') {
+        if (!isControlPlaneAllowed(req, getRemoteAccess?.())) {
+          return sendJSON(res, 403, { error: 'forbidden: broadcast is restricted to localhost while exposed' })
+        }
         const body = await readBody(req)
         if (!body || !body.type) {
           return sendJSON(res, 400, { error: 'Missing message type' })
@@ -931,6 +964,9 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
       }
 
       // DELETE /api/remove-file — remove a file from the server
+      // Not control-plane-gated: it only drops a file from the in-memory set
+      // (no disk deletion, no host-path registration), so a remote reviewer
+      // closing a tab is harmless and the gate would only break that UX.
       if (req.method === 'DELETE' && pathname === '/api/remove-file') {
         const body = await readBody(req)
         const { file } = body

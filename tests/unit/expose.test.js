@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 
 import {
+  applyExposureToLock,
   buildRemoteUrl,
   normalizeExposeConfig,
   reconcileExposure,
@@ -133,6 +134,69 @@ describe('remote access provider reconciler', () => {
       remoteUrl: 'http://192.168.1.50:3000/spec.md',
     })
     expect(result.warnings.join('\n')).toMatch(/HTTP.*unauthenticated/i)
+  })
+
+  it('carries allowPublicUnauthenticated through reconciled metadata', async () => {
+    const result = await reconcileExposure({
+      config: { expose: 'off', allowPublicUnauthenticated: false },
+      actualPort: 3000,
+      files: [],
+    })
+    expect(result.allowPublicUnauthenticated).toBe(false)
+  })
+
+  it('warns and flags risk for external with allowPublicUnauthenticated', async () => {
+    const result = await reconcileExposure({
+      config: {
+        expose: 'external',
+        remoteBaseUrl: 'https://mdprobe.example.com',
+        allowPublicUnauthenticated: true,
+      },
+      actualPort: 3000,
+      files: ['spec.md'],
+    })
+
+    expect(result.allowPublicUnauthenticated).toBe(true)
+    expect(result.exposeRisk).toBe('external-public-unauthenticated')
+    expect(result.warnings.join('\n')).toMatch(/no authentication/i)
+  })
+
+  it('persists allowPublicUnauthenticated and warnings into the lock', () => {
+    const lock = applyExposureToLock(
+      { pid: 1, port: 3000, url: 'http://127.0.0.1:3000' },
+      {
+        expose: 'lan',
+        exposePort: 8443,
+        bindHost: '192.168.1.50',
+        allowPublicUnauthenticated: false,
+        remoteBaseUrl: 'http://192.168.1.50:3000',
+        warnings: ['LAN expose serves over HTTP without authentication'],
+      },
+    )
+
+    expect(lock.url).toBe('http://127.0.0.1:3000')
+    expect(lock.allowPublicUnauthenticated).toBe(false)
+    expect(lock.remoteBaseUrl).toBe('http://192.168.1.50:3000')
+    expect(lock.exposeWarnings).toEqual(['LAN expose serves over HTTP without authentication'])
+  })
+
+  it('clears stale remote metadata from the lock when exposure goes off', () => {
+    const lock = applyExposureToLock(
+      {
+        pid: 1,
+        port: 3000,
+        url: 'http://127.0.0.1:3000',
+        remoteBaseUrl: 'https://old.example.com',
+        exposeWarnings: ['stale'],
+        exposeRisk: 'lan-http-unauthenticated',
+      },
+      { expose: 'off', warnings: [] },
+    )
+
+    expect(lock.remoteBaseUrl).toBeUndefined()
+    expect(lock.exposeWarnings).toBeUndefined()
+    expect(lock.exposeRisk).toBeUndefined()
+    expect(lock.expose).toBe('off')
   })
 
   it('turns off persisted tailscale serve mapping with lock exposePort', async () => {

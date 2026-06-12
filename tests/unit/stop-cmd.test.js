@@ -177,6 +177,27 @@ describe('runStop', () => {
     expect(exposeMocks.unexposeProvider).toHaveBeenCalledWith({ lock })
   })
 
+  it('notifies that tailscale exposure persists when stopping without --unexpose', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const lock = {
+      pid: 999995,
+      port: 3000,
+      url: 'http://localhost:3000',
+      startedAt: new Date().toISOString(),
+      expose: 'tailscale',
+      exposePort: 8443,
+      remoteBaseUrl: 'https://host.example.ts.net:8443',
+    }
+    fs.writeFileSync(lockPath, JSON.stringify(lock))
+
+    await runStop({ force: true })
+
+    expect(exposeMocks.unexposeProvider).not.toHaveBeenCalled()
+    const printed = logSpy.mock.calls.map((c) => c.join(' ')).join('\n')
+    expect(printed).toMatch(/remote exposure stays active.*--unexpose/s)
+    logSpy.mockRestore()
+  })
+
   it('handles missing lock file gracefully', async () => {
     // Ensure no lock file exists
     if (fs.existsSync(lockPath)) {
