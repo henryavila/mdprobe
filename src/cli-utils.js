@@ -29,6 +29,14 @@ export function findMarkdownFiles(dir) {
  * @returns {string|true|undefined} The value, `true` if flag has no value, `undefined` if absent
  */
 export function extractFlag(args, flag) {
+  const prefix = `${flag}=`
+  const eqIdx = args.findIndex((arg) => arg.startsWith(prefix))
+  if (eqIdx !== -1) {
+    const value = args[eqIdx].slice(prefix.length)
+    args.splice(eqIdx, 1)
+    return value === '' ? true : value
+  }
+
   const idx = args.indexOf(flag)
   if (idx === -1) return undefined
   args.splice(idx, 1)

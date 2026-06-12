@@ -13,6 +13,7 @@ import { AnnotationFile, computeSectionStatus } from './annotations.js'
 import { detectDrift } from './hash.js'
 import { locate } from './anchoring/v2/index.js'
 import { createLogger } from './telemetry.js'
+import { buildRemoteUrl } from './expose/index.js'
 
 function reanchorAllV2(anns, source) {
   const mdast = unified().use(remarkParse).use(remarkGfm).parse(source)
@@ -102,19 +103,20 @@ async function discoverMarkdownFiles(dir) {
 // ---------------------------------------------------------------------------
 
 /**
- * Check whether a port on 127.0.0.1 is available.
+ * Check whether a port on the configured bind host is available.
  *
  * @param {number} port
+ * @param {string} [host='127.0.0.1']
  * @returns {Promise<boolean>}
  */
-function isPortAvailable(port) {
+function isPortAvailable(port, host = '127.0.0.1') {
   return new Promise((resolve) => {
     const server = node_net.createServer()
     server.once('error', () => resolve(false))
     server.once('listening', () => {
       server.close(() => resolve(true))
     })
-    server.listen(port, '127.0.0.1')
+    server.listen(port, host)
   })
 }
 
@@ -124,12 +126,13 @@ function isPortAvailable(port) {
  *
  * @param {number} startPort
  * @param {number} [maxAttempts=10]
+ * @param {string} [host='127.0.0.1']
  * @returns {Promise<number>}
  */
-async function findAvailablePort(startPort, maxAttempts = 10) {
+async function findAvailablePort(startPort, maxAttempts = 10, host = '127.0.0.1') {
   for (let i = 0; i < maxAttempts; i++) {
     const port = startPort + i
-    if (await isPortAvailable(port)) {
+    if (await isPortAvailable(port, host)) {
       return port
     }
   }
@@ -297,6 +300,22 @@ if (!SHELL_FALLBACK) {
 </html>`
 }
 
+function buildRemoteStatus(remoteAccess, resolvedFiles) {
+  if (!remoteAccess) return {}
+
+  const status = {
+    expose: remoteAccess.expose || 'off',
+  }
+  if (remoteAccess.remoteBaseUrl) {
+    status.remoteBaseUrl = remoteAccess.remoteBaseUrl
+    if (resolvedFiles.length === 1) {
+      status.remoteUrl = buildRemoteUrl(remoteAccess.remoteBaseUrl, node_path.basename(resolvedFiles[0]))
+    }
+  }
+  if (remoteAccess.exposeRisk) status.exposeRisk = remoteAccess.exposeRisk
+  return status
+}
+
 // ---------------------------------------------------------------------------
 // createServer
 // ---------------------------------------------------------------------------
@@ -307,6 +326,8 @@ if (!SHELL_FALLBACK) {
  * @param {object} options
  * @param {string[]} options.files - File paths or a directory path
  * @param {number}  [options.port=3000] - Preferred port
+ * @param {string}  [options.bindHost='127.0.0.1'] - Host used by listen/port check
+ * @param {object}  [options.remoteAccess] - Remote exposure metadata for status
  * @param {boolean} [options.open=true] - Open browser on start
  * @param {boolean} [options.once=false] - One-shot review mode
  * @param {string}  [options.author] - Reviewer author name
@@ -317,6 +338,8 @@ export async function createServer(options) {
   const {
     files,
     port: preferredPort = 3000,
+    bindHost = '127.0.0.1',
+    remoteAccess = null,
     open = true,
     once = false,
     author,
@@ -333,13 +356,14 @@ export async function createServer(options) {
     : process.cwd()
 
   // 2. Find an available port
-  let actualPort = await findAvailablePort(preferredPort)
+  let actualPort = await findAvailablePort(preferredPort, 10, bindHost)
   if (actualPort !== preferredPort) {
     tel.log('port_search', { requested: preferredPort, chosen: actualPort })
   }
 
   // 3. Build route handler (onFinish is set below for --once mode)
   let onFinishCallback = null
+  let remoteAccessState = remoteAccess || null
   // broadcastToAll and addFiles are defined below; forward-ref via closure
   let broadcastFn = () => {}
   let addFilesFn = () => {}
@@ -351,6 +375,7 @@ export async function createServer(options) {
     author,
     port: actualPort,
     buildHash: buildHash || null,
+    getRemoteAccess: () => remoteAccessState,
     getOnFinish: () => onFinishCallback,
     broadcast: (msg) => broadcastFn(msg),
     addFiles: (paths) => addFilesFn(paths),
@@ -388,7 +413,7 @@ export async function createServer(options) {
   // 6. Start listening
   await new Promise((resolve, reject) => {
     httpServer.once('error', reject)
-    httpServer.listen(actualPort, '127.0.0.1', () => {
+    httpServer.listen(actualPort, bindHost, () => {
       httpServer.removeListener('error', reject)
       resolve()
     })
@@ -397,7 +422,9 @@ export async function createServer(options) {
   if (actualPort === 0) {
     actualPort = httpServer.address().port
   }
-  tel.log('listen', { port: actualPort, url: `http://127.0.0.1:${actualPort}`, fileCount: resolvedFiles.length })
+  const localUrlHost = bindHost === '0.0.0.0' ? '127.0.0.1' : bindHost
+  const localUrl = `http://${localUrlHost}:${actualPort}`
+  tel.log('listen', { port: actualPort, bindHost, url: localUrl, fileCount: resolvedFiles.length })
 
   // 7. Set up file watcher for live reload
   const watchDirs = new Set(resolvedFiles.map((f) => node_path.dirname(f)))
@@ -530,11 +557,14 @@ export async function createServer(options) {
   // 8. Build return object
   // Expose address() for compatibility with tests that call server.address()
   const serverObj = {
-    url: `http://127.0.0.1:${actualPort}`,
+    url: localUrl,
     port: actualPort,
+    bindHost,
     address: () => httpServer.address(),
     addFiles: addFilesFn,
     getFiles: () => resolvedFiles.map(f => node_path.basename(f)),
+    getRemoteAccess: () => remoteAccessState,
+    setRemoteAccess: (metadata) => { remoteAccessState = metadata || null },
     broadcast: (msg) => broadcastToAll(msg),
     removeFile: (basename) => removeFileFn(basename),
     close: (cb) => {
@@ -583,7 +613,7 @@ export async function createServer(options) {
  * @param {string} [ctx.author]
  * @returns {(req: node_http.IncomingMessage, res: node_http.ServerResponse) => void}
  */
-function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port, buildHash, getOnFinish, broadcast, addFiles, removeFile }) {
+function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port, buildHash, getRemoteAccess, getOnFinish, broadcast, addFiles, removeFile }) {
   return async (req, res) => {
     try {
       const parsedUrl = new URL(req.url, `http://${req.headers.host}`)
@@ -861,6 +891,7 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
 
       // GET /api/status — identity check for singleton discovery
       if (req.method === 'GET' && pathname === '/api/status') {
+        const remoteStatus = buildRemoteStatus(getRemoteAccess?.(), resolvedFiles)
         return sendJSON(res, 200, {
           identity: 'mdprobe',
           pid: process.pid,
@@ -868,6 +899,7 @@ function createRequestHandler({ resolvedFiles, assetBaseDir, once, author, port,
           files: resolvedFiles.map(f => node_path.basename(f)),
           uptime: process.uptime(),
           buildHash,
+          ...remoteStatus,
         })
       }
 

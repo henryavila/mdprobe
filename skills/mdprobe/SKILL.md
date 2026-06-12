@@ -47,10 +47,10 @@ conversation and asking "what do you think?" — STOP. Save it to a file and use
 
 | Tool | Input | Output | Purpose |
 |------|-------|--------|---------|
-| `mdprobe_view` | `{ paths?, content?, filename?, open? }` | `{ url, files, savedTo? }` | Open content in browser for human review |
+| `mdprobe_view` | `{ paths?, content?, filename?, open? }` | `{ url, remoteUrl?, remoteBaseUrl?, expose?, files, savedTo? }` | Open content in browser for human review |
 | `mdprobe_annotations` | `{ path }` | `{ source, sections, annotations, summary }` | Read annotations after human review |
 | `mdprobe_update` | `{ path, actions[] }` | `{ updated, annotations, summary }` | Resolve, reopen, reply, add, or delete annotations |
-| `mdprobe_status` | `{}` | `{ running, url?, files? }` | Check if server is running |
+| `mdprobe_status` | `{}` | `{ running, url?, remoteUrl?, remoteBaseUrl?, expose?, files? }` | Check if server is running |
 
 ---
 
@@ -68,11 +68,21 @@ Do NOT call `mdprobe_view` when merely mentioning a file in a status update (e.g
 
 Show: `📄 docs/spec.md → http://{urlStyle}:{port}/spec.md`
 
+If the response includes `remoteUrl`, also show:
+
+```
+Local:  http://{urlStyle}:{port}/spec.md
+Remote: https://remote-host.example/spec.md
+```
+
 **Multiple files in one response — one combined call:**
 
 > mdprobe_view({ paths: ["docs/spec.md", "docs/batch-1.md", "docs/batch-2.md"] })
 
 Show: `📄 3 files → http://{urlStyle}:{port}`
+
+If the response includes `remoteBaseUrl`, show it as `Remote base:`. Only show
+`Remote:` when the response includes `remoteUrl` for one specific file.
 
 ### Rule 2 — Review opens automatically
 

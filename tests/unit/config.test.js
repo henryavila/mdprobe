@@ -143,6 +143,33 @@ describe('config', () => {
       const config = JSON.parse(raw)
       expect(config.author).toBe('')
     })
+
+    it('coerces known remote access config values before writing', async () => {
+      await setConfig('exposePort', '8443', configPath)
+      await setConfig('allowPublicUnauthenticated', 'true', configPath)
+      await setConfig('remoteBaseUrl', 'https://mdprobe.example.com/', configPath)
+
+      const raw = await readFile(configPath, 'utf8')
+      const config = JSON.parse(raw)
+      expect(config.exposePort).toBe(8443)
+      expect(config.allowPublicUnauthenticated).toBe(true)
+      expect(config.remoteBaseUrl).toBe('https://mdprobe.example.com')
+    })
+
+    it('rejects invalid known remote access config values', async () => {
+      await expect(setConfig('expose', 'ngrok', configPath)).rejects.toThrow(/planned provider/i)
+      await expect(setConfig('exposePort', '80', configPath)).rejects.toThrow(/1024-65535/)
+      await expect(setConfig('exposePort', '8443abc', configPath)).rejects.toThrow(/1024-65535/)
+      await expect(setConfig('remoteBaseUrl', 'http://mdprobe.example.com', configPath)).rejects.toThrow(/https/i)
+    })
+
+    it('continues to allow unknown config keys without coercion', async () => {
+      await setConfig('futureKey', '8443', configPath)
+
+      const raw = await readFile(configPath, 'utf8')
+      const config = JSON.parse(raw)
+      expect(config.futureKey).toBe('8443')
+    })
   })
 
   describe('getAuthor', () => {

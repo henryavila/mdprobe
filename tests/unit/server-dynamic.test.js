@@ -95,3 +95,29 @@ describe('SPA routing', () => {
     expect(html).toContain('<!DOCTYPE html>')
   })
 })
+
+describe('remote access metadata', () => {
+  it('exposes configured remote metadata from /api/status without changing local url', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'mdprobe-remote-status-'))
+    const f = join(tmp, 'spec.md')
+    await writeFile(f, '# Spec')
+
+    server = await createServer({
+      files: [f],
+      port: 0,
+      open: false,
+      remoteAccess: {
+        expose: 'external',
+        remoteBaseUrl: 'https://mdprobe.example.com',
+      },
+    })
+
+    expect(server.url).toMatch(/^http:\/\/127\.0\.0\.1:/)
+
+    const res = await fetch(`${server.url}/api/status`)
+    const data = await res.json()
+    expect(data.expose).toBe('external')
+    expect(data.remoteBaseUrl).toBe('https://mdprobe.example.com')
+    expect(data.remoteUrl).toBe('https://mdprobe.example.com/spec.md')
+  })
+})
