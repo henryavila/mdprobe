@@ -50,6 +50,8 @@ Options:
                   Remote base URL for external provider
   --bind-host <ip>
                   Bind host for explicit LAN exposure
+  --expose-port <port>
+                  Public HTTPS port for the tailscale provider (default: 8443)
   --once          Review mode (single pass, then exit)
   -d, --detach    Start server in background and exit
   --no-open       Don't auto-open browser
@@ -452,6 +454,9 @@ async function main() {
     }
 
     console.log(`Server detached at ${lock.url} (PID ${lock.pid})`)
+    for (const warning of lock.exposeWarnings || []) {
+      console.error(`Warning: ${warning}`)
+    }
     printAccessUrls(lock.url, mdFiles, lock)
     console.log('Use `mdprobe stop` to terminate it.')
 

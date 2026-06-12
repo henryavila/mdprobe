@@ -134,6 +134,8 @@ export async function runStop(opts = {}) {
       if (result.unexposed) {
         console.log('mdprobe: remote exposure disabled')
       }
+    } else if (lock.expose === 'tailscale' && lock.remoteBaseUrl) {
+      console.log(`mdprobe: remote exposure stays active (${lock.remoteBaseUrl}); run \`mdprobe stop --unexpose\` to disable the tailscale mapping`)
     }
 
     const alive = isProcessAlive(lock.pid)

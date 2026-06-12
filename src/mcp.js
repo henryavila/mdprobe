@@ -39,21 +39,66 @@ function broadcastToRemote(serverUrl, msg) {
   req.end(body)
 }
 
-async function applyExposureToServer(srv, config, files = []) {
-  const exposeConfig = normalizeExposeConfig(config)
-  const bindHost = resolveServerBindHost(exposeConfig)
-  const lock = srv._remote ? await readLockFile() : undefined
-  const exposure = await reconcileExposure({
-    config: { ...exposeConfig, bindHost },
-    actualPort: srv.port,
-    files,
-    lock,
-  })
+function assignExposure(srv, exposure) {
   srv.expose = exposure.expose
   srv.remoteBaseUrl = exposure.remoteBaseUrl
   srv.exposeRisk = exposure.exposeRisk
   srv.setRemoteAccess?.(exposure)
   return exposure
+}
+
+function localOnlyExposure(srv, reason) {
+  tel.log('expose_disabled', { reason })
+  const exposure = { expose: 'off', allowPublicUnauthenticated: false, warnings: [reason] }
+  srv._exposureKey = null
+  srv._exposureBase = null
+  return assignExposure(srv, exposure)
+}
+
+// Re-derive a per-file remote deep link from a cached base exposure without
+// re-running provider side effects (e.g. `tailscale serve`).
+function exposureForFiles(base, files) {
+  const exposure = { ...base }
+  exposure.remoteUrl = base.remoteBaseUrl && files.length === 1
+    ? buildRemoteUrl(base.remoteBaseUrl, files[0])
+    : undefined
+  return exposure
+}
+
+async function applyExposureToServer(srv, config, files = []) {
+  let exposeConfig
+  let bindHost
+  try {
+    exposeConfig = normalizeExposeConfig(config)
+    bindHost = resolveServerBindHost(exposeConfig)
+  } catch (err) {
+    return localOnlyExposure(srv, `remote exposure disabled: ${err.message}`)
+  }
+
+  // Memoize the provider reconciliation: only the per-file deep link depends on
+  // `files`, so when the effective config and port are unchanged we skip the
+  // (potentially process-spawning) provider work and just rebuild remoteUrl.
+  const key = JSON.stringify({ ...exposeConfig, bindHost, port: srv.port })
+  if (srv._exposureKey === key && srv._exposureBase) {
+    return assignExposure(srv, exposureForFiles(srv._exposureBase, files))
+  }
+
+  let exposure
+  try {
+    const lock = srv._remote ? await readLockFile() : undefined
+    exposure = await reconcileExposure({
+      config: { ...exposeConfig, bindHost },
+      actualPort: srv.port,
+      files,
+      lock,
+    })
+  } catch (err) {
+    return localOnlyExposure(srv, `remote exposure disabled: ${err.message}`)
+  }
+
+  srv._exposureKey = key
+  srv._exposureBase = exposure
+  return assignExposure(srv, exposure)
 }
 
 async function getOrCreateServer(port = 3000, config = {}) {
@@ -68,19 +113,35 @@ async function getOrCreateServer(port = 3000, config = {}) {
 
   if (!httpServerPromise) {
     const buildHash = await computeBuildHash()
-    const exposeConfig = normalizeExposeConfig(config)
-    const bindHost = resolveServerBindHost(exposeConfig)
+    // A malformed expose config must not block local review: fall back to
+    // local-only binding and let reconciliation surface the issue per-call.
+    let exposeConfig
+    let bindHost
+    try {
+      exposeConfig = normalizeExposeConfig(config)
+      bindHost = resolveServerBindHost(exposeConfig)
+    } catch (err) {
+      tel.log('expose_disabled', { reason: err.message, phase: 'create' })
+      exposeConfig = normalizeExposeConfig({})
+      bindHost = '127.0.0.1'
+    }
 
     const existing = await discoverExistingServer(undefined, buildHash)
     if (existing) {
       const lock = await readLockFile()
       let remoteFiles = []
-      const exposure = await reconcileExposure({
-        config: { ...exposeConfig, bindHost },
-        actualPort: existing.port,
-        files: [],
-        lock,
-      })
+      let exposure
+      try {
+        exposure = await reconcileExposure({
+          config: { ...exposeConfig, bindHost },
+          actualPort: existing.port,
+          files: [],
+          lock,
+        })
+      } catch (err) {
+        tel.log('expose_disabled', { reason: err.message, phase: 'attach' })
+        exposure = { expose: 'off', allowPublicUnauthenticated: false, warnings: [err.message] }
+      }
       if (lock) {
         await writeLockFile(applyExposureToLock(lock, exposure))
       }
@@ -401,5 +462,5 @@ export async function startMcpServer() {
 }
 
 // For testing: expose internals
-export { getOrCreateServer, buildUrl }
+export { getOrCreateServer, buildUrl, applyExposureToServer }
 export function _resetServer() { httpServerPromise = null }

@@ -83,6 +83,7 @@ export async function reconcileExposure({
     bindHost: normalized.expose === 'lan'
       ? resolveServerBindHost(normalized, { networkInterfaces })
       : normalized.bindHost,
+    allowPublicUnauthenticated: normalized.allowPublicUnauthenticated,
     warnings: [],
   }
 
@@ -92,6 +93,10 @@ export async function reconcileExposure({
     case 'external':
       result.remoteBaseUrl = normalized.remoteBaseUrl
       result.remoteUrl = maybeBuildRemoteUrl(result.remoteBaseUrl, files)
+      if (normalized.allowPublicUnauthenticated) {
+        result.exposeRisk = 'external-public-unauthenticated'
+        result.warnings.push('expose=external with allowPublicUnauthenticated=true: mdProbe has no authentication; anyone who can reach the proxy can read the served files and write annotations.')
+      }
       return result
     case 'tailscale':
       return reconcileTailscale({ normalized, actualPort, files, execFile, result })
@@ -125,15 +130,17 @@ export function applyExposureToLock(lock, exposure) {
     expose: exposure?.expose || 'off',
     exposePort: exposure?.exposePort ?? DEFAULT_EXPOSE_CONFIG.exposePort,
     bindHost: exposure?.bindHost || DEFAULT_EXPOSE_CONFIG.bindHost,
+    allowPublicUnauthenticated: Boolean(exposure?.allowPublicUnauthenticated),
   }
 
-  for (const key of ['remoteBaseUrl', 'remoteUrl', 'exposeRisk']) {
+  for (const key of ['remoteBaseUrl', 'remoteUrl', 'exposeRisk', 'exposeWarnings']) {
     delete next[key]
   }
 
   if (exposure?.remoteBaseUrl) next.remoteBaseUrl = exposure.remoteBaseUrl
   if (exposure?.remoteUrl) next.remoteUrl = exposure.remoteUrl
   if (exposure?.exposeRisk) next.exposeRisk = exposure.exposeRisk
+  if (exposure?.warnings?.length) next.exposeWarnings = [...exposure.warnings]
 
   return next
 }
@@ -267,7 +274,12 @@ function reconcileLan({ actualPort, files, networkInterfaces, result, lock }) {
   result.remoteBaseUrl = `http://${remoteHost}:${actualPort}`
   result.remoteUrl = maybeBuildRemoteUrl(result.remoteBaseUrl, files, { allowHttp: true })
   result.exposeRisk = 'lan-http-unauthenticated'
-  result.warnings.push('LAN expose uses HTTP and is unauthenticated; anyone on the reachable network can read files and write annotations.')
+  result.warnings.push(
+    'LAN expose serves over HTTP without authentication: any host on the reachable network can read the served files (and other files in their directories) and write annotations. '
+    + (result.allowPublicUnauthenticated
+      ? 'allowPublicUnauthenticated=true: control endpoints (add-files, broadcast) are also reachable remotely.'
+      : 'Registering new host paths (add-files) stays restricted to localhost unless allowPublicUnauthenticated=true.')
+  )
   return result
 }
 
