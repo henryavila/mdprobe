@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
+import { coerceKnownConfigValue } from './expose/index.js'
 
 const DEFAULT_CONFIG_PATH = join(homedir(), '.mdprobe.json')
 
@@ -47,7 +48,7 @@ export async function setConfig(key, value, configPath = DEFAULT_CONFIG_PATH) {
     // File missing or unreadable — start fresh
   }
 
-  config[key] = value
+  config[key] = coerceKnownConfigValue(key, value)
   await writeFile(configPath, JSON.stringify(config), 'utf8')
 }
 

@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import yaml from 'js-yaml'
 
 // Test buildUrl directly
-import { buildUrl } from '../../src/mcp.js'
+import { buildStatusResponse, buildToolViewResponse, buildUrl } from '../../src/mcp.js'
 
 describe('buildUrl()', () => {
   it('builds localhost URL', () => {
@@ -21,6 +21,71 @@ describe('buildUrl()', () => {
 
   it('appends file path', () => {
     expect(buildUrl(3000, 'localhost', 'spec.md')).toBe('http://localhost:3000/spec.md')
+  })
+})
+
+describe('remote metadata response helpers', () => {
+  it('adds remoteUrl to mdprobe_view response for a single file', () => {
+    const response = buildToolViewResponse({
+      srv: {
+        port: 3000,
+        remoteBaseUrl: 'https://mdprobe.example.com',
+        expose: 'external',
+      },
+      urlStyle: 'localhost',
+      resolved: ['/tmp/spec.md'],
+    })
+
+    expect(response).toEqual({
+      url: 'http://localhost:3000/spec.md',
+      remoteBaseUrl: 'https://mdprobe.example.com',
+      remoteUrl: 'https://mdprobe.example.com/spec.md',
+      expose: 'external',
+      files: ['spec.md'],
+    })
+  })
+
+  it('omits remoteUrl from mdprobe_status when multiple files are active', () => {
+    const response = buildStatusResponse({
+      srv: {
+        url: 'http://127.0.0.1:3000',
+        remoteBaseUrl: 'https://mdprobe.example.com',
+        expose: 'external',
+        getFiles: () => ['a.md', 'b.md'],
+      },
+    })
+
+    expect(response).toEqual({
+      running: true,
+      url: 'http://127.0.0.1:3000',
+      remoteBaseUrl: 'https://mdprobe.example.com',
+      expose: 'external',
+      files: ['a.md', 'b.md'],
+    })
+  })
+
+  it('adds remoteUrl to mdprobe_status when one remote proxy file is tracked', () => {
+    const remoteFiles = []
+    const srv = {
+      url: 'http://127.0.0.1:3000',
+      remoteBaseUrl: 'https://mdprobe.example.com',
+      expose: 'external',
+      addFiles(paths) {
+        remoteFiles.splice(0, remoteFiles.length, ...paths.map(p => p.split('/').pop()))
+      },
+      getFiles: () => remoteFiles,
+    }
+
+    srv.addFiles(['/tmp/spec.md'])
+
+    expect(buildStatusResponse({ srv })).toEqual({
+      running: true,
+      url: 'http://127.0.0.1:3000',
+      remoteBaseUrl: 'https://mdprobe.example.com',
+      remoteUrl: 'https://mdprobe.example.com/spec.md',
+      expose: 'external',
+      files: ['spec.md'],
+    })
   })
 })
 

@@ -1,7 +1,9 @@
 import fs from 'node:fs/promises'
 import node_http from 'node:http'
+import { networkInterfaces as nodeNetworkInterfaces } from 'node:os'
 import { readLockFile, DEFAULT_LOCK_PATH, isProcessAlive } from '../singleton.js'
 import { createLogger } from '../telemetry.js'
+import { unexposeProvider } from '../expose/index.js'
 
 const tel = createLogger('stop')
 
@@ -53,16 +55,30 @@ async function killProcess(pid) {
   return { killed: true }
 }
 
-function probePort(port, timeout = 1000) {
+function getScanHosts(networkInterfaces = nodeNetworkInterfaces) {
+  const hosts = ['127.0.0.1']
+  const interfaces = networkInterfaces()
+  for (const entries of Object.values(interfaces)) {
+    for (const entry of entries || []) {
+      if (entry.family === 'IPv4' && !entry.internal && !hosts.includes(entry.address)) {
+        hosts.push(entry.address)
+      }
+    }
+  }
+  return hosts
+}
+
+function probePort(host, port, timeout = 1000) {
   return new Promise((resolve) => {
-    const req = node_http.get(`http://127.0.0.1:${port}/api/status`, { timeout }, (res) => {
+    const url = `http://${host}:${port}`
+    const req = node_http.get(`${url}/api/status`, { timeout }, (res) => {
       let data = ''
       res.on('data', (chunk) => { data += chunk })
       res.on('end', () => {
         try {
           const json = JSON.parse(data)
           if (json.identity === 'mdprobe') {
-            resolve({ port, pid: json.pid, files: json.files || [], uptime: json.uptime })
+            resolve({ port, pid: json.pid, files: json.files || [], uptime: json.uptime, url })
           } else {
             resolve(null)
           }
@@ -78,11 +94,19 @@ function probePort(port, timeout = 1000) {
 
 async function scanForOrphans() {
   const probes = []
-  for (let port = SCAN_PORT_START; port <= SCAN_PORT_END; port++) {
-    probes.push(probePort(port))
+  for (const host of getScanHosts()) {
+    for (let port = SCAN_PORT_START; port <= SCAN_PORT_END; port++) {
+      probes.push(probePort(host, port))
+    }
   }
   const results = await Promise.all(probes)
-  return results.filter(Boolean)
+  const seen = new Set()
+  return results.filter(Boolean).filter((result) => {
+    const key = `${result.pid}:${result.port}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 /**
@@ -90,17 +114,28 @@ async function scanForOrphans() {
  * Falls back to port scanning when no lock file exists.
  * @param {object} opts
  * @param {boolean} [opts.force=false] - skip confirmation prompt
+ * @param {boolean} [opts.unexpose=false] - disable persisted provider mapping when supported
  * @param {string} [opts.lockPath] - custom lock file path
  * @returns {Promise<{stopped: boolean, reason?: string, pid?: number}>}
  */
 export async function runStop(opts = {}) {
-  const { force = false, lockPath = DEFAULT_LOCK_PATH } = opts
+  const { force = false, unexpose = false, lockPath = DEFAULT_LOCK_PATH } = opts
 
   const lock = await readLockFile(lockPath)
 
   let staleCleanedPid = null
 
   if (lock) {
+    if (unexpose) {
+      const result = await unexposeProvider({ lock })
+      for (const warning of result.warnings || []) {
+        console.error(`mdprobe: ${warning}`)
+      }
+      if (result.unexposed) {
+        console.log('mdprobe: remote exposure disabled')
+      }
+    }
+
     const alive = isProcessAlive(lock.pid)
 
     if (!alive) {
@@ -133,7 +168,7 @@ export async function runStop(opts = {}) {
   for (const orphan of orphans) {
     const result = await stopInstance({
       pid: orphan.pid, port: orphan.port,
-      url: `http://127.0.0.1:${orphan.port}`,
+      url: orphan.url,
       files: orphan.files, uptime: orphan.uptime,
       source: 'scan', force, lockPath: null,
     })
