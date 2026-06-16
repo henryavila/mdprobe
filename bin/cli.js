@@ -533,7 +533,13 @@ async function main() {
   try {
     const existing = await discoverExistingServer(lockPath)
 
-    if (existing) {
+    // An explicit --port that differs from the running instance is a request
+    // for a distinct server — joining would silently send files to the wrong
+    // one. Skip the join and start a fresh instance on the requested port.
+    const portExplicit = portFlag !== undefined && portFlag !== true
+    if (existing && portExplicit && existing.port !== port) {
+      console.log(`Running mdprobe is on port ${existing.port}, but --port ${port} was requested; starting a separate instance.`)
+    } else if (existing) {
       const existingLock = await readLockFile(lockPath)
       const exposure = await reconcileExposure({
         config: { ...exposeConfig, bindHost: serverBindHost },
