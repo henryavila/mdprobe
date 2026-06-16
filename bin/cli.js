@@ -18,6 +18,7 @@ import {
   normalizeExposeConfig,
   reconcileExposure,
   resolveServerBindHost,
+  unexposeProvider,
 } from '../src/expose/index.js'
 
 const tel = createLogger('cli')
@@ -531,6 +532,10 @@ async function main() {
   // --- Singleton mode: reuse existing server if running ---
   const lockPath = process.env.MDPROBE_LOCK_PATH || undefined
   try {
+    // Capture the lock before discovery — discoverExistingServer deletes stale
+    // lock files for dead instances, and we need it to detect an orphaned
+    // tailscale serve mapping left behind by a non-graceful exit.
+    const priorLock = await readLockFile(lockPath)
     const existing = await discoverExistingServer(lockPath)
 
     // An explicit --port that differs from the running instance is a request
@@ -564,6 +569,20 @@ async function main() {
         process.exit(0)
       }
       console.log('Could not join existing server, starting new instance...')
+    }
+
+    // Clean an orphaned tailscale serve mapping left by a dead prior instance
+    // (no live server found) unless this run re-establishes the same mapping —
+    // in which case `tailscale serve` overwrites it anyway. A non-graceful kill
+    // cannot self-clean; this heals it on the next start.
+    if (!existing && priorLock?.expose === 'tailscale' && priorLock.remoteBaseUrl) {
+      const reestablishesSame = normalizeExposeConfig(exposeConfig).expose === 'tailscale'
+        && Number(exposeConfig.exposePort ?? priorLock.exposePort) === Number(priorLock.exposePort)
+      if (!reestablishesSame) {
+        const cleanup = await unexposeProvider({ lock: priorLock })
+        if (cleanup.unexposed) console.log(`Cleaned orphaned tailscale serve on :${priorLock.exposePort}`)
+        for (const warning of cleanup.warnings || []) console.error(`Warning: ${warning}`)
+      }
     }
 
     // Start new server
