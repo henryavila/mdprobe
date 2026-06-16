@@ -92,15 +92,24 @@ function fileUrl(baseUrl, files) {
   return files.length === 1 ? `${baseUrl}/${basename(files[0])}` : baseUrl
 }
 
-function remoteUrlForFiles(exposure, files) {
-  if (!exposure?.remoteBaseUrl || files.length !== 1) return undefined
-  return buildRemoteUrl(exposure.remoteBaseUrl, basename(files[0]))
-}
-
 function printAccessUrls(localBaseUrl, files, exposure) {
   console.log(`Local:  ${fileUrl(localBaseUrl, files)}`)
-  const remoteUrl = remoteUrlForFiles(exposure, files)
-  if (remoteUrl) console.log(`Remote: ${remoteUrl}`)
+
+  const remoteBaseUrl = exposure?.remoteBaseUrl
+  if (!remoteBaseUrl) return
+
+  if (files.length === 1) {
+    console.log(`Remote: ${buildRemoteUrl(remoteBaseUrl, basename(files[0]))}`)
+    return
+  }
+
+  // Multi-file: no single deep-link, so print the base + one link per file
+  // (the per-basename routes already exist server-side).
+  console.log(`Remote: ${remoteBaseUrl}`)
+  for (const file of files) {
+    const name = basename(file)
+    console.log(`  - ${name}: ${buildRemoteUrl(remoteBaseUrl, name)}`)
+  }
 }
 
 function printExposureWarnings(exposure) {
