@@ -659,6 +659,11 @@ body {
   font-size: 11px;
 }
 
+.btn.copied {
+  border-color: var(--accent, #22c55e);
+  color: var(--accent, #22c55e);
+}
+
 .btn-ghost,
 .btn--ghost {
   background: transparent;
