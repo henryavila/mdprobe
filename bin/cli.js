@@ -109,6 +109,14 @@ function printExposureWarnings(exposure) {
   }
 }
 
+function printExposureSummary(exposure) {
+  if (!exposure || exposure.expose === 'off') return
+  const parts = [`expose=${exposure.expose}`, `bindHost=${exposure.bindHost}`]
+  if (exposure.remoteBaseUrl) parts.push(`remoteBaseUrl=${exposure.remoteBaseUrl}`)
+  if (exposure.exposeRisk) parts.push(`risk=${exposure.exposeRisk}`)
+  console.log(`Exposure: ${parts.join(' ')}`)
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -486,6 +494,7 @@ async function main() {
       })
       server.setRemoteAccess?.(exposure)
       printExposureWarnings(exposure)
+      printExposureSummary(exposure)
       console.log(`Server listening at ${server.url}`)
       printAccessUrls(server.url, mdFiles, exposure)
       if (!noOpenFlag) {
@@ -527,6 +536,7 @@ async function main() {
         await writeLockFile(applyExposureToLock(existingLock, exposure), lockPath)
       }
       printExposureWarnings(exposure)
+      printExposureSummary(exposure)
       console.log(`Found running mdprobe at ${existing.url}`)
       const result = await joinExistingServer(existing.url, mdFiles)
       if (result.ok) {
@@ -556,6 +566,7 @@ async function main() {
     })
     server.setRemoteAccess?.(exposure)
     printExposureWarnings(exposure)
+    printExposureSummary(exposure)
 
     await writeLockFile(applyExposureToLock({
       pid: process.pid,

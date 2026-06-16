@@ -275,7 +275,7 @@ function reconcileLan({ actualPort, files, networkInterfaces, result, lock }) {
   result.remoteUrl = maybeBuildRemoteUrl(result.remoteBaseUrl, files, { allowHttp: true })
   result.exposeRisk = 'lan-http-unauthenticated'
   result.warnings.push(
-    'LAN expose serves over HTTP without authentication: any host on the reachable network can read the served files (and other files in their directories) and write annotations. '
+    'LAN expose serves over HTTP without authentication: any host on the reachable network can read the explicitly registered files (siblings in their directories are not served) and write annotations. '
     + (result.allowPublicUnauthenticated
       ? 'allowPublicUnauthenticated=true: control endpoints (add-files, broadcast) are also reachable remotely.'
       : 'Registering new host paths (add-files) stays restricted to localhost unless allowPublicUnauthenticated=true.')
