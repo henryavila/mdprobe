@@ -246,9 +246,42 @@ async function reconcileTailscale({ normalized, actualPort, files, execFile, res
     return result
   }
 
+  // Readback: a non-throwing `serve` does not guarantee the mapping persisted.
+  // Re-read serve status and only announce the URL if the mapping is present.
+  let serveStatus = null
+  try {
+    const { stdout } = await execFile('tailscale', ['serve', 'status', '--json'])
+    serveStatus = JSON.parse(stdout)
+  } catch {
+    // Older tailscale or a transient error: we cannot verify. Announce the URL
+    // but flag that it was not confirmed rather than silently claiming success.
+    result.warnings.push(`could not read tailscale serve status to verify the mapping for :${normalized.exposePort} → ${actualPort}; assuming it is active`)
+  }
+
+  if (serveStatus && !serveStatusHasMapping(serveStatus, normalized.exposePort, actualPort)) {
+    result.warnings.push(`tailscale serve reported no mapping for :${normalized.exposePort} → ${actualPort}; continuing local-only`)
+    return result
+  }
+
   result.remoteBaseUrl = `https://${dnsName}:${normalized.exposePort}`
   result.remoteUrl = maybeBuildRemoteUrl(result.remoteBaseUrl, files)
   return result
+}
+
+function serveStatusHasMapping(serveStatus, exposePort, actualPort) {
+  if (!serveStatus || typeof serveStatus !== 'object') return false
+  const portTag = `:${exposePort}`
+  const proxyTag = `:${actualPort}`
+  const web = serveStatus.Web && typeof serveStatus.Web === 'object' ? serveStatus.Web : {}
+  for (const [host, conf] of Object.entries(web)) {
+    if (!String(host).endsWith(portTag)) continue
+    const handlers = conf && typeof conf.Handlers === 'object' ? conf.Handlers : {}
+    for (const handler of Object.values(handlers)) {
+      const proxy = handler && handler.Proxy ? String(handler.Proxy) : ''
+      if (proxy.includes(proxyTag)) return true
+    }
+  }
+  return false
 }
 
 function reconcileLan({ actualPort, files, networkInterfaces, result, lock }) {

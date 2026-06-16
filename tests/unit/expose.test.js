@@ -46,7 +46,7 @@ describe('remote access provider reconciler', () => {
     expect(() => normalizeExposeConfig({ expose: 'cloudflare' })).toThrow(/planned provider/i)
   })
 
-  it('runs tailscale status and serve with controlled arguments', async () => {
+  it('runs tailscale status and serve, then confirms the mapping via readback', async () => {
     const calls = []
     const execFile = vi.fn(async (cmd, args) => {
       calls.push([cmd, args])
@@ -55,6 +55,18 @@ describe('remote access provider reconciler', () => {
           stdout: JSON.stringify({
             BackendState: 'Running',
             Self: { DNSName: 'device.example.ts.net.' },
+          }),
+          stderr: '',
+        }
+      }
+      if (args[0] === 'serve' && args[1] === 'status') {
+        return {
+          stdout: JSON.stringify({
+            Web: {
+              'device.example.ts.net:8443': {
+                Handlers: { '/': { Proxy: 'http://127.0.0.1:3000' } },
+              },
+            },
           }),
           stderr: '',
         }
@@ -72,6 +84,7 @@ describe('remote access provider reconciler', () => {
     expect(calls).toEqual([
       ['tailscale', ['status', '--json']],
       ['tailscale', ['serve', '--bg', '--https=8443', '3000']],
+      ['tailscale', ['serve', 'status', '--json']],
     ])
     expect(result).toMatchObject({
       expose: 'tailscale',
@@ -79,6 +92,62 @@ describe('remote access provider reconciler', () => {
       remoteUrl: 'https://device.example.ts.net:8443/spec.md',
       warnings: [],
     })
+  })
+
+  it('stays local-only when serve readback reports no mapping', async () => {
+    const execFile = vi.fn(async (cmd, args) => {
+      if (args[0] === 'status') {
+        return {
+          stdout: JSON.stringify({
+            BackendState: 'Running',
+            Self: { DNSName: 'device.example.ts.net.' },
+          }),
+          stderr: '',
+        }
+      }
+      if (args[0] === 'serve' && args[1] === 'status') {
+        return { stdout: JSON.stringify({}), stderr: '' }
+      }
+      return { stdout: '', stderr: '' }
+    })
+
+    const result = await reconcileExposure({
+      config: { expose: 'tailscale', exposePort: 8443 },
+      actualPort: 3000,
+      files: ['spec.md'],
+      execFile,
+    })
+
+    expect(result.remoteBaseUrl).toBeUndefined()
+    expect(result.warnings.join('\n')).toMatch(/no mapping for :8443 → 3000/i)
+  })
+
+  it('announces with a caveat when serve status is unreadable', async () => {
+    const execFile = vi.fn(async (cmd, args) => {
+      if (args[0] === 'status') {
+        return {
+          stdout: JSON.stringify({
+            BackendState: 'Running',
+            Self: { DNSName: 'device.example.ts.net.' },
+          }),
+          stderr: '',
+        }
+      }
+      if (args[0] === 'serve' && args[1] === 'status') {
+        throw new Error('unknown flag: status')
+      }
+      return { stdout: '', stderr: '' }
+    })
+
+    const result = await reconcileExposure({
+      config: { expose: 'tailscale', exposePort: 8443 },
+      actualPort: 3000,
+      files: ['spec.md'],
+      execFile,
+    })
+
+    expect(result.remoteBaseUrl).toBe('https://device.example.ts.net:8443')
+    expect(result.warnings.join('\n')).toMatch(/could not read tailscale serve status/i)
   })
 
   it('falls back local-only when tailscale is not running', async () => {
