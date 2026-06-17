@@ -241,6 +241,37 @@ describe('Argument parsing', () => {
     expect(result.stderr + result.stdout).toMatch(/port|missing|invalid|required|error/i)
     expect(result.code).not.toBe(0)
   })
+
+  it('--expose=external prints Local and Remote URLs', async () => {
+    const mdPath = join(tmpDir, 'doc.md')
+    await writeFile(mdPath, '# Hello\n', 'utf8')
+
+    const cli = spawnCli([
+      mdPath,
+      '--port',
+      '0',
+      '--expose=external',
+      '--remote-base-url=https://mdprobe.example.com',
+    ])
+    try {
+      await cli.waitForOutput(/Remote: https:\/\/mdprobe\.example\.com\/doc\.md/i, 5000)
+      const output = cli.getStdout() + cli.getStderr()
+      expect(output).toMatch(/Local:\s+http:\/\/127\.0\.0\.1:\d+\/doc\.md/)
+      expect(output).toContain('Remote: https://mdprobe.example.com/doc.md')
+    } finally {
+      await cli.kill()
+    }
+  })
+
+  it('rejects planned expose providers before starting a server', async () => {
+    const mdPath = join(tmpDir, 'doc.md')
+    await writeFile(mdPath, '# Hello\n', 'utf8')
+
+    const result = await run([mdPath, '--expose=ngrok', '--no-open'])
+
+    expect(result.code).not.toBe(0)
+    expect(result.stderr + result.stdout).toMatch(/planned provider/i)
+  })
 })
 
 // ---------------------------------------------------------------------------

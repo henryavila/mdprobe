@@ -1,8 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
-import os from 'node:os'
 import { spawn } from 'node:child_process'
+
+const httpMocks = vi.hoisted(() => ({
+  get: vi.fn(),
+}))
 
 // Isolate these unit tests from the network: the real port scanner probes
 // ports 3000–3010, which other test files (integration servers) may bind
@@ -10,7 +13,8 @@ import { spawn } from 'node:child_process'
 // No test in this file exercises the orphan-found path, so make every probe
 // fail fast and deterministically.
 vi.mock('node:http', () => {
-  const get = () => {
+  const get = (...args) => {
+    httpMocks.get(...args)
     const req = {
       on(event, cb) {
         if (event === 'error') queueMicrotask(() => cb(new Error('mocked: no server')))
@@ -23,6 +27,27 @@ vi.mock('node:http', () => {
   return { default: { get }, get }
 })
 
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal()
+  const networkInterfaces = () => ({
+    lo: [{ family: 'IPv4', internal: true, address: '127.0.0.1' }],
+    eth0: [{ family: 'IPv4', internal: false, address: '192.168.1.50' }],
+  })
+  return {
+    ...actual,
+    default: { ...(actual.default || actual), networkInterfaces },
+    networkInterfaces,
+  }
+})
+
+const exposeMocks = vi.hoisted(() => ({
+  unexposeProvider: vi.fn(async () => ({ unexposed: true, warnings: [] })),
+}))
+
+vi.mock('../../src/expose/index.js', () => ({
+  unexposeProvider: exposeMocks.unexposeProvider,
+}))
+
 import { runStop } from '../../src/cli/stop-cmd.js'
 import { DEFAULT_LOCK_PATH } from '../../src/singleton.js'
 
@@ -30,6 +55,8 @@ const lockPath = DEFAULT_LOCK_PATH
 
 describe('runStop', () => {
   beforeEach(() => {
+    exposeMocks.unexposeProvider.mockClear()
+    httpMocks.get.mockClear()
     // Clean up any existing lock file
     try {
       fs.unlinkSync(lockPath)
@@ -132,6 +159,45 @@ describe('runStop', () => {
     expect(result.reason).toBe('stale-lock-cleaned')
   })
 
+  it('runs provider unexpose using lock metadata when requested', async () => {
+    const fakePid = 999996
+    const lock = {
+      pid: fakePid,
+      port: 3000,
+      url: 'http://localhost:3000',
+      startedAt: new Date().toISOString(),
+      expose: 'tailscale',
+      exposePort: 8443,
+    }
+    fs.writeFileSync(lockPath, JSON.stringify(lock))
+
+    const result = await runStop({ force: true, unexpose: true })
+
+    expect(result.reason).toBe('stale-lock-cleaned')
+    expect(exposeMocks.unexposeProvider).toHaveBeenCalledWith({ lock })
+  })
+
+  it('notifies that tailscale exposure persists when stopping without --unexpose', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const lock = {
+      pid: 999995,
+      port: 3000,
+      url: 'http://localhost:3000',
+      startedAt: new Date().toISOString(),
+      expose: 'tailscale',
+      exposePort: 8443,
+      remoteBaseUrl: 'https://host.example.ts.net:8443',
+    }
+    fs.writeFileSync(lockPath, JSON.stringify(lock))
+
+    await runStop({ force: true })
+
+    expect(exposeMocks.unexposeProvider).not.toHaveBeenCalled()
+    const printed = logSpy.mock.calls.map((c) => c.join(' ')).join('\n')
+    expect(printed).toMatch(/remote exposure stays active.*--unexpose/s)
+    logSpy.mockRestore()
+  })
+
   it('handles missing lock file gracefully', async () => {
     // Ensure no lock file exists
     if (fs.existsSync(lockPath)) {
@@ -141,6 +207,15 @@ describe('runStop', () => {
     const result = await runStop({ force: true })
     expect(result.stopped).toBe(false)
     expect(result.reason).toBe('no-lock')
+  })
+
+  it('scans local LAN interface hosts when no lock file exists', async () => {
+    const result = await runStop({ force: true })
+
+    expect(result.reason).toBe('no-lock')
+    const urls = httpMocks.get.mock.calls.map(([url]) => String(url))
+    expect(urls).toContain('http://127.0.0.1:3000/api/status')
+    expect(urls).toContain('http://192.168.1.50:3000/api/status')
   })
 
   it('tolerates lock file removal race conditions', async () => {

@@ -266,7 +266,7 @@ export async function registerHook(settingsPath) {
 
 /**
  * Save user config to ~/.mdprobe.json.
- * @param {object} config - { author, urlStyle }
+ * @param {object} config - { author, urlStyle, expose?, remoteBaseUrl?, exposePort?, bindHost? }
  * @param {string} [configPath]
  */
 export async function saveConfig(config, configPath = DEFAULT_CONFIG_PATH) {

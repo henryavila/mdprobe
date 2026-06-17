@@ -9,8 +9,15 @@ import { openBrowser } from './open-browser.js'
 import { AnnotationFile } from './annotations.js'
 import { getConfig } from './config.js'
 import { hashContent } from './hash.js'
-import { discoverExistingServer, joinExistingServer, writeLockFile, computeBuildHash, pingServer } from './singleton.js'
+import { discoverExistingServer, joinExistingServer, writeLockFile, computeBuildHash, pingServer, readLockFile } from './singleton.js'
 import { createLogger } from './telemetry.js'
+import {
+  applyExposureToLock,
+  buildRemoteUrl,
+  normalizeExposeConfig,
+  reconcileExposure,
+  resolveServerBindHost,
+} from './expose/index.js'
 import node_http from 'node:http'
 const tel = createLogger('mcp')
 
@@ -32,7 +39,69 @@ function broadcastToRemote(serverUrl, msg) {
   req.end(body)
 }
 
-async function getOrCreateServer(port = 3000) {
+function assignExposure(srv, exposure) {
+  srv.expose = exposure.expose
+  srv.remoteBaseUrl = exposure.remoteBaseUrl
+  srv.exposeRisk = exposure.exposeRisk
+  srv.setRemoteAccess?.(exposure)
+  return exposure
+}
+
+function localOnlyExposure(srv, reason) {
+  tel.log('expose_disabled', { reason })
+  const exposure = { expose: 'off', allowPublicUnauthenticated: false, warnings: [reason] }
+  srv._exposureKey = null
+  srv._exposureBase = null
+  return assignExposure(srv, exposure)
+}
+
+// Re-derive a per-file remote deep link from a cached base exposure without
+// re-running provider side effects (e.g. `tailscale serve`).
+function exposureForFiles(base, files) {
+  const exposure = { ...base }
+  exposure.remoteUrl = base.remoteBaseUrl && files.length === 1
+    ? buildRemoteUrl(base.remoteBaseUrl, files[0])
+    : undefined
+  return exposure
+}
+
+async function applyExposureToServer(srv, config, files = []) {
+  let exposeConfig
+  let bindHost
+  try {
+    exposeConfig = normalizeExposeConfig(config)
+    bindHost = resolveServerBindHost(exposeConfig)
+  } catch (err) {
+    return localOnlyExposure(srv, `remote exposure disabled: ${err.message}`)
+  }
+
+  // Memoize the provider reconciliation: only the per-file deep link depends on
+  // `files`, so when the effective config and port are unchanged we skip the
+  // (potentially process-spawning) provider work and just rebuild remoteUrl.
+  const key = JSON.stringify({ ...exposeConfig, bindHost, port: srv.port })
+  if (srv._exposureKey === key && srv._exposureBase) {
+    return assignExposure(srv, exposureForFiles(srv._exposureBase, files))
+  }
+
+  let exposure
+  try {
+    const lock = srv._remote ? await readLockFile() : undefined
+    exposure = await reconcileExposure({
+      config: { ...exposeConfig, bindHost },
+      actualPort: srv.port,
+      files,
+      lock,
+    })
+  } catch (err) {
+    return localOnlyExposure(srv, `remote exposure disabled: ${err.message}`)
+  }
+
+  srv._exposureKey = key
+  srv._exposureBase = exposure
+  return assignExposure(srv, exposure)
+}
+
+async function getOrCreateServer(port = 3000, config = {}) {
   if (httpServerPromise) {
     const srv = await httpServerPromise
     const { alive } = await pingServer(srv.url)
@@ -44,40 +113,121 @@ async function getOrCreateServer(port = 3000) {
 
   if (!httpServerPromise) {
     const buildHash = await computeBuildHash()
+    // A malformed expose config must not block local review: fall back to
+    // local-only binding and let reconciliation surface the issue per-call.
+    let exposeConfig
+    let bindHost
+    try {
+      exposeConfig = normalizeExposeConfig(config)
+      bindHost = resolveServerBindHost(exposeConfig)
+    } catch (err) {
+      tel.log('expose_disabled', { reason: err.message, phase: 'create' })
+      exposeConfig = normalizeExposeConfig({})
+      bindHost = '127.0.0.1'
+    }
 
     const existing = await discoverExistingServer(undefined, buildHash)
     if (existing) {
+      const lock = await readLockFile()
+      let remoteFiles = []
+      let exposure
+      try {
+        exposure = await reconcileExposure({
+          config: { ...exposeConfig, bindHost },
+          actualPort: existing.port,
+          files: [],
+          lock,
+        })
+      } catch (err) {
+        tel.log('expose_disabled', { reason: err.message, phase: 'attach' })
+        exposure = { expose: 'off', allowPublicUnauthenticated: false, warnings: [err.message] }
+      }
+      if (lock) {
+        await writeLockFile(applyExposureToLock(lock, exposure))
+      }
       httpServerPromise = Promise.resolve({
         url: existing.url,
         port: existing.port,
-        addFiles: (paths) => joinExistingServer(existing.url, paths),
-        getFiles: () => [],
+        expose: exposure.expose,
+        remoteBaseUrl: exposure.remoteBaseUrl,
+        exposeRisk: exposure.exposeRisk,
+        addFiles: async (paths) => {
+          const result = await joinExistingServer(existing.url, paths)
+          if (result.ok && Array.isArray(result.files)) remoteFiles = result.files
+          return result
+        },
+        getFiles: () => remoteFiles,
         broadcast: (msg) => broadcastToRemote(existing.url, msg),
         close: async () => {},
         _remote: true,
       })
     } else {
-      httpServerPromise = createServer({ files: [], port, open: false, buildHash }).then(async (srv) => {
-        await writeLockFile({
+      httpServerPromise = createServer({
+        files: [],
+        port,
+        bindHost,
+        open: false,
+        buildHash,
+      }).then(async (srv) => {
+        const exposure = await applyExposureToServer(srv, { ...exposeConfig, bindHost }, [])
+        await writeLockFile(applyExposureToLock({
           pid: process.pid,
           port: srv.port,
           url: srv.url,
           startedAt: new Date().toISOString(),
           buildHash,
-        })
+        }, exposure))
         return srv
       })
     }
     const srv = await httpServerPromise
     tel.log('server_create', { mode: srv._remote ? 'remote' : 'new', port: srv.port, url: srv.url })
   }
-  return httpServerPromise
+  const srv = await httpServerPromise
+  await applyExposureToServer(srv, config, srv.getFiles?.() ?? [])
+  return srv
 }
 
 function buildUrl(port, urlStyle, filePath) {
   const host = urlStyle === 'mdprobe.localhost' ? 'mdprobe.localhost' : 'localhost'
   const suffix = filePath ? '/' + filePath : ''
   return `http://${host}:${port}${suffix}`
+}
+
+export function buildToolViewResponse({ srv, urlStyle, resolved, savedTo }) {
+  const files = resolved.map(p => basename(p))
+  const url = resolved.length === 1
+    ? buildUrl(srv.port, urlStyle, basename(resolved[0]))
+    : buildUrl(srv.port, urlStyle)
+  const response = { url, files }
+  if (srv.remoteBaseUrl) {
+    response.remoteBaseUrl = srv.remoteBaseUrl
+    if (resolved.length === 1) {
+      response.remoteUrl = buildRemoteUrl(srv.remoteBaseUrl, basename(resolved[0]))
+    }
+  }
+  if (srv.expose) response.expose = srv.expose
+  if (srv.exposeRisk) response.exposeRisk = srv.exposeRisk
+  if (savedTo) response.savedTo = savedTo
+  return response
+}
+
+export function buildStatusResponse({ srv }) {
+  const files = srv.getFiles?.() ?? []
+  const response = {
+    running: true,
+    url: srv.url,
+    files,
+  }
+  if (srv.remoteBaseUrl) {
+    response.remoteBaseUrl = srv.remoteBaseUrl
+    if (files.length === 1) {
+      response.remoteUrl = buildRemoteUrl(srv.remoteBaseUrl, files[0])
+    }
+  }
+  if (srv.expose) response.expose = srv.expose
+  if (srv.exposeRisk) response.exposeRisk = srv.exposeRisk
+  return response
 }
 
 export function validateViewParams(params) {
@@ -152,7 +302,8 @@ export async function startMcpServer() {
       }
     }
 
-    const srv = await getOrCreateServer()
+    const currentConfig = await getConfig()
+    const srv = await getOrCreateServer(3000, currentConfig)
     let resolved
     let savedTo
 
@@ -167,20 +318,16 @@ export async function startMcpServer() {
       resolved = params.paths.map(p => resolve(p))
     }
 
-    srv.addFiles(resolved)
+    await srv.addFiles(resolved)
 
-    const url = resolved.length === 1
-      ? buildUrl(srv.port, urlStyle, basename(resolved[0]))
-      : buildUrl(srv.port, urlStyle)
+    await applyExposureToServer(srv, currentConfig, resolved)
+    const response = buildToolViewResponse({ srv, urlStyle, resolved, savedTo })
     if (params.open) {
-      tel.log('browser_open', { url })
-      await openBrowser(url).catch((err) => { tel.log('error', { fn: 'openBrowser', error: err.message }) })
+      tel.log('browser_open', { url: response.url })
+      await openBrowser(response.url).catch((err) => { tel.log('error', { fn: 'openBrowser', error: err.message }) })
     } else {
-      tel.log('browser_skip', { url })
+      tel.log('browser_skip', { url: response.url })
     }
-
-    const response = { url, files: resolved.map(p => basename(p)) }
-    if (savedTo) response.savedTo = savedTo
 
     return {
       content: [{ type: 'text', text: JSON.stringify(response) }],
@@ -305,11 +452,7 @@ export async function startMcpServer() {
     }
     const srv = await httpServerPromise
     return {
-      content: [{ type: 'text', text: JSON.stringify({
-        running: true,
-        url: srv.url,
-        files: srv.getFiles?.() ?? [],
-      }) }],
+      content: [{ type: 'text', text: JSON.stringify(buildStatusResponse({ srv })) }],
     }
   })
 
@@ -319,5 +462,5 @@ export async function startMcpServer() {
 }
 
 // For testing: expose internals
-export { getOrCreateServer, buildUrl }
+export { getOrCreateServer, buildUrl, applyExposureToServer }
 export function _resetServer() { httpServerPromise = null }

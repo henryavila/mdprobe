@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -8,17 +8,48 @@ const cliPath = path.join(import.meta.dirname, '..', '..', 'bin', 'cli.js')
 
 describe('mdprobe --detach', () => {
   let tmpDir, fixturePath, customLock, bgPid
+  // Every temp dir this suite creates, so the afterAll guard can detect a
+  // detached server that escaped per-test cleanup without false-flagging
+  // unrelated mdprobe processes from other sessions.
+  const spawnedTmpDirs = []
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mdprobe-detach-'))
+    spawnedTmpDirs.push(tmpDir)
     fixturePath = path.join(tmpDir, 'doc.md')
     fs.writeFileSync(fixturePath, '# Test\n\nHello world.\n')
     customLock = path.join(tmpDir, 'mdprobe.lock')
     bgPid = null
   })
 
+  // Guard: a leaked detached server (spawned with -d, unref'd) survives the
+  // parent and would otherwise accumulate across runs. Fail loudly if any
+  // process still references this suite's temp dirs — and kill it so the
+  // guard never leaves garbage behind even when it trips.
+  afterAll(() => {
+    if (process.platform !== 'linux') return // /proc enumeration is Linux-only
+    const leaked = []
+    for (const entry of fs.readdirSync('/proc')) {
+      if (!/^\d+$/.test(entry)) continue
+      let cmd
+      try {
+        cmd = fs.readFileSync(`/proc/${entry}/cmdline`).toString().replace(/\0/g, ' ')
+      } catch { continue }
+      if (spawnedTmpDirs.some((dir) => cmd.includes(dir))) {
+        leaked.push(Number(entry))
+        try { process.kill(Number(entry), 'SIGKILL') } catch { /* ignore */ }
+      }
+    }
+    expect(leaked, `leaked detached server(s): ${leaked.join(', ')}`).toEqual([])
+  })
+
   afterEach(async () => {
-    // Kill the background server if it started
+    // Kill the background server if it started. Tests that don't capture bgPid
+    // explicitly would otherwise leak a detached server, so fall back to the
+    // pid recorded in the lock file before we delete it.
+    if (!bgPid) {
+      try { bgPid = JSON.parse(fs.readFileSync(customLock, 'utf-8')).pid } catch { /* ignore */ }
+    }
     if (bgPid) {
       try { process.kill(bgPid, 'SIGTERM') } catch { /* ignore */ }
       // Give it a moment to exit

@@ -12,6 +12,14 @@ import { findMarkdownFiles, extractFlag, hasFlag } from '../src/cli-utils.js'
 import { openBrowser } from '../src/open-browser.js'
 import { discoverExistingServer, joinExistingServer, writeLockFile, readLockFile, registerShutdownHandlers } from '../src/singleton.js'
 import { createLogger, getParentCmd } from '../src/telemetry.js'
+import {
+  applyExposureToLock,
+  buildRemoteUrl,
+  normalizeExposeConfig,
+  reconcileExposure,
+  resolveServerBindHost,
+  unexposeProvider,
+} from '../src/expose/index.js'
 
 const tel = createLogger('cli')
 
@@ -38,6 +46,13 @@ function printUsage() {
 
 Options:
   --port <n>      Port number (default: 3000)
+  --expose <name> Remote access provider: off, external, tailscale, lan
+  --remote-base-url <url>
+                  Remote base URL for external provider
+  --bind-host <ip>
+                  Bind host for explicit LAN exposure
+  --expose-port <port>
+                  Public HTTPS port for the tailscale provider (default: 8443)
   --once          Review mode (single pass, then exit)
   -d, --detach    Start server in background and exit
   --no-open       Don't auto-open browser
@@ -52,7 +67,8 @@ Subcommands:
   config [key] [value]   Manage configuration
   export <path> [flags]  Export annotations (--report, --inline, --json, --sarif)
   migrate <path> [--dry-run]  Batch migrate v1 annotations to v2
-  stop [--force]         Kill singleton server and clean lock file
+  stop [--force] [--unexpose]
+                         Kill singleton server and clean lock file
   update [--yes] [--dry-run] [--force]
                          Update mdProbe to the latest version
 `)
@@ -62,6 +78,53 @@ function fatal(msg) {
   tel.log('exit', { code: 1, reason: msg })
   process.stderr.write(msg + '\n')
   process.exit(1)
+}
+
+function requireFlagValue(flagName, value) {
+  if (value === true) fatal(`Error: ${flagName} requires a value`)
+  return value
+}
+
+function mergeExposeOptions(config, overrides) {
+  return normalizeExposeConfig({ ...config, ...overrides })
+}
+
+function fileUrl(baseUrl, files) {
+  return files.length === 1 ? `${baseUrl}/${basename(files[0])}` : baseUrl
+}
+
+function printAccessUrls(localBaseUrl, files, exposure) {
+  console.log(`Local:  ${fileUrl(localBaseUrl, files)}`)
+
+  const remoteBaseUrl = exposure?.remoteBaseUrl
+  if (!remoteBaseUrl) return
+
+  if (files.length === 1) {
+    console.log(`Remote: ${buildRemoteUrl(remoteBaseUrl, basename(files[0]))}`)
+    return
+  }
+
+  // Multi-file: no single deep-link, so print the base + one link per file
+  // (the per-basename routes already exist server-side).
+  console.log(`Remote: ${remoteBaseUrl}`)
+  for (const file of files) {
+    const name = basename(file)
+    console.log(`  - ${name}: ${buildRemoteUrl(remoteBaseUrl, name)}`)
+  }
+}
+
+function printExposureWarnings(exposure) {
+  for (const warning of exposure?.warnings || []) {
+    console.error(`Warning: ${warning}`)
+  }
+}
+
+function printExposureSummary(exposure) {
+  if (!exposure || exposure.expose === 'off') return
+  const parts = [`expose=${exposure.expose}`, `bindHost=${exposure.bindHost}`]
+  if (exposure.remoteBaseUrl) parts.push(`remoteBaseUrl=${exposure.remoteBaseUrl}`)
+  if (exposure.exposeRisk) parts.push(`risk=${exposure.exposeRisk}`)
+  console.log(`Exposure: ${parts.join(' ')}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +161,8 @@ async function main() {
   if (args[0] === 'stop') {
     const { runStop } = await import('../src/cli/stop-cmd.js')
     const force = args.includes('--force') || args.includes('-y')
-    const result = await runStop({ force })
+    const unexpose = args.includes('--unexpose')
+    const result = await runStop({ force, unexpose })
     process.exit(result.stopped || result.reason === 'no-lock' ? 0 : 1)
   }
 
@@ -279,6 +343,12 @@ async function main() {
   // ---- Serve mode (default) ----
 
   // Check if author is configured; prompt if missing (only in interactive terminals)
+  let currentConfig
+  try {
+    currentConfig = await getConfig()
+  } catch (err) {
+    fatal(`Error: ${err.message}`)
+  }
   let currentAuthor = await getAuthor()
   if (currentAuthor === 'anonymous' && process.stdin.isTTY) {
     const { createInterface } = await import('node:readline')
@@ -301,6 +371,25 @@ async function main() {
   const onceFlag = hasFlag(args, '--once')
   const noOpenFlag = hasFlag(args, '--no-open')
   const detachFlag = hasFlag(args, '--detach') || hasFlag(args, '-d')
+  const exposeFlag = extractFlag(args, '--expose')
+  const remoteBaseUrlFlag = extractFlag(args, '--remote-base-url')
+  const bindHostFlag = extractFlag(args, '--bind-host')
+  const exposePortFlag = extractFlag(args, '--expose-port')
+
+  const exposeOverrides = {}
+  if (exposeFlag !== undefined) exposeOverrides.expose = requireFlagValue('--expose', exposeFlag)
+  if (remoteBaseUrlFlag !== undefined) exposeOverrides.remoteBaseUrl = requireFlagValue('--remote-base-url', remoteBaseUrlFlag)
+  if (bindHostFlag !== undefined) exposeOverrides.bindHost = requireFlagValue('--bind-host', bindHostFlag)
+  if (exposePortFlag !== undefined) exposeOverrides.exposePort = requireFlagValue('--expose-port', exposePortFlag)
+
+  let exposeConfig
+  let serverBindHost
+  try {
+    exposeConfig = mergeExposeOptions(currentConfig, exposeOverrides)
+    serverBindHost = resolveServerBindHost(exposeConfig)
+  } catch (err) {
+    fatal(`Error: ${err.message}`)
+  }
 
   // Validate port
   let port = 3000
@@ -383,13 +472,14 @@ async function main() {
     }
 
     console.log(`Server detached at ${lock.url} (PID ${lock.pid})`)
+    for (const warning of lock.exposeWarnings || []) {
+      console.error(`Warning: ${warning}`)
+    }
+    printAccessUrls(lock.url, mdFiles, lock)
     console.log('Use `mdprobe stop` to terminate it.')
 
     if (!noOpenFlag) {
-      const fileUrl = mdFiles.length === 1
-        ? `${lock.url}/${basename(mdFiles[0])}`
-        : lock.url
-      try { await openBrowser(fileUrl) } catch { /* ignore */ }
+      try { await openBrowser(fileUrl(lock.url, mdFiles)) } catch { /* ignore */ }
     }
 
     tel.log('exit', { code: 0, reason: 'detached' })
@@ -402,13 +492,23 @@ async function main() {
       const server = await createMdprobeServer({
         files: mdFiles,
         port,
+        bindHost: serverBindHost,
         open: false,
         once: true,
         author: currentAuthor,
       })
+      const exposure = await reconcileExposure({
+        config: { ...exposeConfig, bindHost: serverBindHost },
+        actualPort: server.port,
+        files: mdFiles,
+      })
+      server.setRemoteAccess?.(exposure)
+      printExposureWarnings(exposure)
+      printExposureSummary(exposure)
       console.log(`Server listening at ${server.url}`)
+      printAccessUrls(server.url, mdFiles, exposure)
       if (!noOpenFlag) {
-        try { await openBrowser(server.url) } catch { /* ignore */ }
+        try { await openBrowser(fileUrl(server.url, mdFiles)) } catch { /* ignore */ }
       }
       console.log(`Review mode: ${mdFiles.length} file(s)`)
       mdFiles.forEach(f => console.log(`  - ${basename(f)}`))
@@ -432,18 +532,38 @@ async function main() {
   // --- Singleton mode: reuse existing server if running ---
   const lockPath = process.env.MDPROBE_LOCK_PATH || undefined
   try {
+    // Capture the lock before discovery — discoverExistingServer deletes stale
+    // lock files for dead instances, and we need it to detect an orphaned
+    // tailscale serve mapping left behind by a non-graceful exit.
+    const priorLock = await readLockFile(lockPath)
     const existing = await discoverExistingServer(lockPath)
 
-    if (existing) {
+    // An explicit --port that differs from the running instance is a request
+    // for a distinct server — joining would silently send files to the wrong
+    // one. Skip the join and start a fresh instance on the requested port.
+    const portExplicit = portFlag !== undefined && portFlag !== true
+    if (existing && portExplicit && existing.port !== port) {
+      console.log(`Running mdprobe is on port ${existing.port}, but --port ${port} was requested; starting a separate instance.`)
+    } else if (existing) {
+      const existingLock = await readLockFile(lockPath)
+      const exposure = await reconcileExposure({
+        config: { ...exposeConfig, bindHost: serverBindHost },
+        actualPort: existing.port,
+        files: mdFiles,
+        lock: existingLock,
+      })
+      if (existingLock) {
+        await writeLockFile(applyExposureToLock(existingLock, exposure), lockPath)
+      }
+      printExposureWarnings(exposure)
+      printExposureSummary(exposure)
       console.log(`Found running mdprobe at ${existing.url}`)
       const result = await joinExistingServer(existing.url, mdFiles)
       if (result.ok) {
         console.log(`Added ${mdFiles.length} file(s) to existing server`)
+        printAccessUrls(existing.url, mdFiles, exposure)
         if (!noOpenFlag) {
-          const fileUrl = mdFiles.length === 1
-            ? `${existing.url}/${basename(mdFiles[0])}`
-            : existing.url
-          try { await openBrowser(fileUrl) } catch { /* ignore */ }
+          try { await openBrowser(fileUrl(existing.url, mdFiles)) } catch { /* ignore */ }
         }
         tel.log('exit', { code: 0, reason: 'joined-existing' })
         process.exit(0)
@@ -451,27 +571,51 @@ async function main() {
       console.log('Could not join existing server, starting new instance...')
     }
 
+    // Clean an orphaned tailscale serve mapping left by a dead prior instance
+    // (no live server found) unless this run re-establishes the same mapping —
+    // in which case `tailscale serve` overwrites it anyway. A non-graceful kill
+    // cannot self-clean; this heals it on the next start.
+    if (!existing && priorLock?.expose === 'tailscale' && priorLock.remoteBaseUrl) {
+      const reestablishesSame = normalizeExposeConfig(exposeConfig).expose === 'tailscale'
+        && Number(exposeConfig.exposePort ?? priorLock.exposePort) === Number(priorLock.exposePort)
+      if (!reestablishesSame) {
+        const cleanup = await unexposeProvider({ lock: priorLock })
+        if (cleanup.unexposed) console.log(`Cleaned orphaned tailscale serve on :${priorLock.exposePort}`)
+        for (const warning of cleanup.warnings || []) console.error(`Warning: ${warning}`)
+      }
+    }
+
     // Start new server
     const server = await createMdprobeServer({
       files: mdFiles,
       port,
+      bindHost: serverBindHost,
       open: false,
       author: currentAuthor,
     })
+    const exposure = await reconcileExposure({
+      config: { ...exposeConfig, bindHost: serverBindHost },
+      actualPort: server.port,
+      files: mdFiles,
+    })
+    server.setRemoteAccess?.(exposure)
+    printExposureWarnings(exposure)
+    printExposureSummary(exposure)
 
-    await writeLockFile({
+    await writeLockFile(applyExposureToLock({
       pid: process.pid,
       port: server.port,
       url: server.url,
       startedAt: new Date().toISOString(),
-    }, lockPath)
+    }, exposure), lockPath)
     registerShutdownHandlers(server, lockPath, () => {
       tel.log('exit', { code: 0, reason: 'shutdown' })
     })
 
     console.log(`Server listening at ${server.url}`)
+    printAccessUrls(server.url, mdFiles, exposure)
     if (!noOpenFlag) {
-      try { await openBrowser(server.url) } catch { /* ignore */ }
+      try { await openBrowser(fileUrl(server.url, mdFiles)) } catch { /* ignore */ }
     }
   } catch (err) {
     fatal(`Error: ${err.message}`)
