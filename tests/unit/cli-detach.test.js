@@ -18,7 +18,12 @@ describe('mdprobe --detach', () => {
   })
 
   afterEach(async () => {
-    // Kill the background server if it started
+    // Kill the background server if it started. Tests that don't capture bgPid
+    // explicitly would otherwise leak a detached server, so fall back to the
+    // pid recorded in the lock file before we delete it.
+    if (!bgPid) {
+      try { bgPid = JSON.parse(fs.readFileSync(customLock, 'utf-8')).pid } catch { /* ignore */ }
+    }
     if (bgPid) {
       try { process.kill(bgPid, 'SIGTERM') } catch { /* ignore */ }
       // Give it a moment to exit
