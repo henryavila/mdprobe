@@ -10,6 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - _Pending entries for the next release will be added here._
 
+## [0.6.0] - 2026-06-17
+
+### Added
+- **Remote access providers.** A generic exposure layer so a running mdProbe can be reached from another device, with Tailscale as the motivating built-in (not the whole architecture). Providers: `off`, `external`, `tailscale`, `lan` (`ngrok`/`cloudflare` specified as planned). New CLI flags `--expose`, `--remote-base-url`, `--bind-host`, and `mdprobe stop --unexpose`. The core keeps `server.url`/`lock.url` local for ping/join/singleton and tracks remote metadata separately; the lock persists `expose`/`exposePort`/`bindHost`/`remoteBaseUrl`/`remoteUrl`, and the CLI prints both `Local:` and `Remote:` URLs. MCP `mdprobe_view`/`mdprobe_status` return `remoteBaseUrl`/`remoteUrl`/`expose`/`exposeRisk`.
+- **"Copy markdown" toolbar button.** Copies the raw source of the current file to the clipboard for reuse (paste into an LLM/agent, a PR, another doc). Uses the source already held in memory (no extra fetch) and falls back to a `<textarea>` + `execCommand` when the Clipboard API is unavailable — e.g. over plain HTTP with `--expose lan`, which is not a secure context.
+- **Exposure summary at startup.** Always logs the resolved `Exposure: expose=… bindHost=… remoteBaseUrl=…` line when exposure is active, instead of staying silent on success.
+
+### Fixed
+- **Control-plane endpoints gated for remote exposure.** `add-files`/`broadcast` stay restricted to localhost for `lan`/`external` unless `allowPublicUnauthenticated=true`; MCP and `stop` paths hardened alongside.
+- **Tailscale serve mapping verified via readback.** `reconcileTailscale` previously announced the remote URL whenever `tailscale serve` did not throw, even if the mapping never persisted. It now re-reads `tailscale serve status --json` and only advertises the URL when a handler proxying to the local port is present (or warns explicitly when status is unreadable).
+- **Remote URLs printed for multi-file exposure.** With 2+ files the proxy was configured but no `Remote:` line was printed. The CLI now prints the remote base plus one per-file deep link.
+- **Corrected the LAN exposure warning.** It claimed sibling files in the served directories were exposed; only explicitly registered files are served.
+- **Orphaned `tailscale serve` cleaned on next start.** A non-graceful exit left the `:exposePort` mapping pointing at a dead port; the next start now clears a stale mapping it does not re-establish.
+- **Singleton no longer joined on a different explicit `--port`.** Passing `--port` that differs from the running instance previously sent files to the wrong server; it now starts a separate instance on the requested port.
+- **`stop` stale-lock-cleaned signal restored**, and a pre-push hook now runs the test suite before every push.
+- **Detached-server test leak.** `cli-detach` spawned real `-d` background servers but one test never captured the pid, leaking an idle node process per suite run. Cleanup now falls back to the lock pid, and an `afterAll` guard fails (and kills) any detached server that escapes per-test teardown.
+
 ## [0.5.2] - 2026-05-26
 
 ### Fixed
@@ -57,6 +74,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Migration
 Existing `.annotations.yaml` files are upgraded automatically on first load. A `.bak` backup is saved alongside (e.g., `spec.md.annotations.yaml.bak`). To roll back, restore from the `.bak` file. Or run `npx mdprobe migrate <dir>` proactively.
 
-[Unreleased]: https://github.com/henryavila/mdprobe/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/henryavila/mdprobe/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/henryavila/mdprobe/compare/v0.5.2...v0.6.0
+[0.5.2]: https://github.com/henryavila/mdprobe/releases/tag/v0.5.2
 [0.5.1]: https://github.com/henryavila/mdprobe/releases/tag/v0.5.1
 [0.5.0]: https://github.com/henryavila/mdprobe/releases/tag/v0.5.0
