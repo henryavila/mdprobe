@@ -24,6 +24,14 @@
 import * as childProcess from 'node:child_process'
 import { homedir } from 'node:os'
 import { join as pathJoin } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+/**
+ * Absolute path to THIS module on disk. Because the file lives inside the
+ * installed package (`<globalRoot>/@henryavila/mdprobe/src/package-manager.js`),
+ * its location reveals which package manager owns the running mdprobe.
+ */
+const SELF_PATH = fileURLToPath(import.meta.url)
 
 /** Recognized package managers, in `which` fallback priority order. */
 const KNOWN_PMS = Object.freeze(['pnpm', 'yarn', 'bun', 'npm'])
@@ -76,6 +84,35 @@ function pmFromUserAgent(ua) {
 }
 
 /**
+ * Infer the package manager from the on-disk location of the running mdprobe.
+ *
+ * This is far more reliable than "which PM is on PATH": a user can have bun
+ * installed for other projects while mdprobe itself was installed with npm.
+ * The which-probe would then pick bun and the update would install into bun's
+ * global root — a *different* mdprobe than the one actually running, leaving
+ * the live binary stale. Matching the install path pins the update to the PM
+ * that owns this binary.
+ *
+ * Markers are checked PM-specific-first because every global layout also
+ * contains a generic `node_modules` segment.
+ *
+ * @param {string} selfPath  Absolute path to this module on disk.
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {'npm'|'pnpm'|'yarn'|'bun'|null}
+ */
+export function pmFromInstallPath(selfPath, env) {
+  if (typeof selfPath !== 'string' || selfPath.length === 0) return null
+  const p = selfPath.replace(/\\/g, '/')
+  const bunInstall = String(env?.BUN_INSTALL ?? '').replace(/\\/g, '/')
+  if (bunInstall && p.startsWith(bunInstall)) return 'bun'
+  if (/(^|\/)\.bun\//.test(p)) return 'bun'
+  if (/(^|\/)\.?pnpm\//.test(p)) return 'pnpm'
+  if (/(^|\/)\.?yarn\//.test(p)) return 'yarn'
+  if (p.includes('/node_modules/')) return 'npm'
+  return null
+}
+
+/**
  * Pick the platform-appropriate "binary on PATH" probe.
  *
  * Unix-like systems ship `which`; Windows ships `where` and has no `which`
@@ -116,11 +153,17 @@ function whichExists(binary, whichBin, runner) {
  *
  * @param {NodeJS.ProcessEnv} [env]
  * @param {(cmd: string, args: string[]) => string} [runner]
+ * @param {string} [selfPath]  Install path of the running module (injectable for tests).
  * @returns {'npm'|'pnpm'|'yarn'|'bun'}
  */
-export function detectPackageManager(env = process.env, runner = defaultRunner) {
+export function detectPackageManager(env = process.env, runner = defaultRunner, selfPath = SELF_PATH) {
   const fromUa = pmFromUserAgent(env?.npm_config_user_agent ?? '')
   if (fromUa) return fromUa
+
+  // Prefer the PM that actually owns the running mdprobe (its install path)
+  // over merely "a PM that happens to exist on PATH". See pmFromInstallPath.
+  const fromPath = pmFromInstallPath(selfPath, env)
+  if (fromPath) return fromPath
 
   const whichBin = pickWhichBinary(env)
   for (const pm of KNOWN_PMS) {

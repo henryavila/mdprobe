@@ -139,6 +139,89 @@ describe('detectPackageManager — which fallback', () => {
 })
 
 // ---------------------------------------------------------------------------
+// detectPackageManager: install-path detection (the PM that owns the binary)
+// ---------------------------------------------------------------------------
+
+describe('detectPackageManager — install path', () => {
+  const SELF = '/src/package-manager.js'
+
+  it('detects npm from an npm-global install path', () => {
+    const env = {}
+    const exec = makeFakeExec()
+    const selfPath = '/home/user/.npm-global/lib/node_modules/@henryavila/mdprobe' + SELF
+    expect(detectPackageManager(env, exec, selfPath)).toBe('npm')
+    // Install-path detection is conclusive → no which probe needed.
+    expect(exec.calls.length).toBe(0)
+  })
+
+  it('detects npm from a system-wide /usr/lib install path', () => {
+    const env = {}
+    const exec = makeFakeExec()
+    const selfPath = '/usr/lib/node_modules/@henryavila/mdprobe' + SELF
+    expect(detectPackageManager(env, exec, selfPath)).toBe('npm')
+  })
+
+  it('detects bun from a ~/.bun install path', () => {
+    const env = {}
+    const exec = makeFakeExec()
+    const selfPath = '/home/user/.bun/install/global/node_modules/@henryavila/mdprobe' + SELF
+    expect(detectPackageManager(env, exec, selfPath)).toBe('bun')
+  })
+
+  it('detects bun via BUN_INSTALL prefix even with a non-default layout', () => {
+    const env = { BUN_INSTALL: '/custom/bun' }
+    const exec = makeFakeExec()
+    const selfPath = '/custom/bun/install/global/node_modules/@henryavila/mdprobe' + SELF
+    expect(detectPackageManager(env, exec, selfPath)).toBe('bun')
+  })
+
+  it('detects pnpm from a pnpm global store path', () => {
+    const env = {}
+    const exec = makeFakeExec()
+    const selfPath = '/home/user/.local/share/pnpm/global/5/node_modules/@henryavila/mdprobe' + SELF
+    expect(detectPackageManager(env, exec, selfPath)).toBe('pnpm')
+  })
+
+  it('detects yarn from a yarn global path', () => {
+    const env = {}
+    const exec = makeFakeExec()
+    const selfPath = '/home/user/.config/yarn/global/node_modules/@henryavila/mdprobe' + SELF
+    expect(detectPackageManager(env, exec, selfPath)).toBe('yarn')
+  })
+
+  it('REGRESSION: npm-installed mdprobe with bun also on PATH still picks npm', () => {
+    // The original bug: a user installed mdprobe with npm but had bun on PATH.
+    // The which-probe returned bun (first match in priority order) and the
+    // update installed into bun's global, leaving the live npm binary stale.
+    const env = {}
+    const exec = makeFakeExec({
+      'which bun': '/home/user/.bun/bin/bun',
+      'which npm': '/usr/bin/npm',
+    })
+    const selfPath = '/home/user/.npm-global/lib/node_modules/@henryavila/mdprobe' + SELF
+    expect(detectPackageManager(env, exec, selfPath)).toBe('npm')
+    // Install-path wins before any which probe runs.
+    expect(exec.calls.length).toBe(0)
+  })
+
+  it('user agent still wins over install path when present', () => {
+    const env = { npm_config_user_agent: 'pnpm/8.15.0 npm/? node/v20 linux x64' }
+    const exec = makeFakeExec()
+    const selfPath = '/home/user/.bun/install/global/node_modules/@henryavila/mdprobe' + SELF
+    expect(detectPackageManager(env, exec, selfPath)).toBe('pnpm')
+  })
+
+  it('falls through to which probe when the install path is inconclusive', () => {
+    const env = {}
+    const exec = makeFakeExec({ 'which yarn': '/usr/local/bin/yarn' })
+    // A dev checkout path (no node_modules / PM marker) → install-path null.
+    const selfPath = '/home/user/projects/mdprobe' + SELF
+    expect(detectPackageManager(env, exec, selfPath)).toBe('yarn')
+    expect(exec.calls.length).toBeGreaterThan(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // detectPackageManager: which/where portability across platforms
 // ---------------------------------------------------------------------------
 
