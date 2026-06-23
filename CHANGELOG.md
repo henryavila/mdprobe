@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - _Pending entries for the next release will be added here._
 
+## [0.7.1] - 2026-06-23
+
+### Fixed
+- **Unknown command gives guidance instead of a cryptic file error.** Running e.g. `mdprobe install` (there is no such subcommand) forwarded the word as a filename and printed `Error: install does not exist`. The CLI now recognizes a bare command-like first argument that is not a known command and not an existing path, and prints what the user can actually do (`mdprobe setup`, `mdprobe <file.md>`, the command list), with an extra note for installer-like words that mdProbe is installed via npm/npx. Real file/directory arguments are unaffected — a missing `*.md` still reports `does not exist`.
+
 ## [0.7.0] - 2026-06-23
 
 ### Added
@@ -83,7 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Migration
 Existing `.annotations.yaml` files are upgraded automatically on first load. A `.bak` backup is saved alongside (e.g., `spec.md.annotations.yaml.bak`). To roll back, restore from the `.bak` file. Or run `npx mdprobe migrate <dir>` proactively.
 
-[Unreleased]: https://github.com/henryavila/mdprobe/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/henryavila/mdprobe/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/henryavila/mdprobe/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/henryavila/mdprobe/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/henryavila/mdprobe/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/henryavila/mdprobe/releases/tag/v0.5.2
