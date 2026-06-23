@@ -2,7 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { findMarkdownFiles, extractFlag, hasFlag } from '../../src/cli-utils.js'
+import {
+  findMarkdownFiles,
+  extractFlag,
+  hasFlag,
+  looksLikeStrayCommand,
+  unknownCommandMessage,
+  KNOWN_COMMANDS,
+} from '../../src/cli-utils.js'
 
 // ===========================================================================
 // extractFlag — flag parsing with value extraction and array mutation
@@ -250,5 +257,66 @@ describe('findMarkdownFiles', () => {
 
     expect(files).toHaveLength(2)
     expect(files.some(f => f.endsWith('deep.md'))).toBe(true)
+  })
+})
+
+// ===========================================================================
+// looksLikeStrayCommand — distinguish a mistyped command from a file path
+// ===========================================================================
+
+describe('looksLikeStrayCommand', () => {
+  it('is true for bare command-like words', () => {
+    for (const w of ['install', 'init', 'setup', 'do-thing', 'i']) {
+      expect(looksLikeStrayCommand(w)).toBe(true)
+    }
+  })
+
+  it('is false for anything with a file extension', () => {
+    for (const w of ['README.md', 'notes.txt', 'a.b']) {
+      expect(looksLikeStrayCommand(w)).toBe(false)
+    }
+  })
+
+  it('is false for anything path-like', () => {
+    for (const w of ['docs/', './foo', '../x', 'a/b', 'C:\\x']) {
+      expect(looksLikeStrayCommand(w)).toBe(false)
+    }
+  })
+
+  it('is false for flags and empty/non-strings', () => {
+    expect(looksLikeStrayCommand('--once')).toBe(false)
+    expect(looksLikeStrayCommand('')).toBe(false)
+    expect(looksLikeStrayCommand(undefined)).toBe(false)
+    expect(looksLikeStrayCommand(null)).toBe(false)
+  })
+})
+
+// ===========================================================================
+// unknownCommandMessage — friendly guidance for a non-command, non-file arg
+// ===========================================================================
+
+describe('unknownCommandMessage', () => {
+  it('names the bad token and lists the real commands', () => {
+    const msg = unknownCommandMessage('frobnicate')
+    expect(msg).toMatch(/'frobnicate' is not a file or a mdprobe command/)
+    for (const cmd of KNOWN_COMMANDS) {
+      expect(msg).toContain(cmd)
+    }
+    expect(msg).toMatch(/mdprobe setup/)
+    expect(msg).toMatch(/mdprobe <file\.md>/)
+    expect(msg).toMatch(/mdprobe --help/)
+  })
+
+  it('adds an "installed via npm/npx" note for installer-like words', () => {
+    expect(unknownCommandMessage('install')).toMatch(/installed via npm\/npx/)
+    expect(unknownCommandMessage('init')).toMatch(/installed via npm\/npx/)
+    // Non-installer words get the generic guidance without that note.
+    expect(unknownCommandMessage('frobnicate')).not.toMatch(/installed via npm\/npx/)
+  })
+
+  it('never claims it is exclusively a command (covers the file case too)', () => {
+    // "not a file or a mdprobe command" stays accurate when the user actually
+    // meant a missing directory like `mdprobe notes`.
+    expect(unknownCommandMessage('notes')).toMatch(/not a file or a mdprobe command/)
   })
 })
