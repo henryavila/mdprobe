@@ -347,6 +347,12 @@ function buildRemoteStatus(remoteAccess, resolvedFiles) {
 // createServer
 // ---------------------------------------------------------------------------
 
+// Cap how long createServer waits for the file watcher's initial scan before
+// resolving anyway. Until chokidar emits 'ready', change events can be missed,
+// which makes live reload racy right after startup. The cap guarantees a slow
+// or silent 'ready' never blocks the server from coming up.
+const WATCHER_READY_TIMEOUT_MS = 3000
+
 /**
  * Create and start the mdprobe development server.
  *
@@ -579,6 +585,17 @@ export async function createServer(options) {
     if (!filePath.endsWith('.md')) return
     const fileName = node_path.basename(filePath)
     broadcastToAll({ type: 'file-removed', file: fileName })
+  })
+
+  // Wait for the watcher's initial scan to finish before reporting the server
+  // as ready, so live reload is active the moment createServer resolves and the
+  // first file change after startup is never dropped. Capped (see constant).
+  await new Promise((resolve) => {
+    let settled = false
+    const finish = () => { if (settled) return; settled = true; resolve() }
+    watcher.once('ready', finish)
+    const timer = setTimeout(finish, WATCHER_READY_TIMEOUT_MS)
+    timer.unref?.()
   })
 
   // 8. Build return object
