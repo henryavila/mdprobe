@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - _Pending entries for the next release will be added here._
 
+## [0.7.2] - 2026-06-23
+
+### Fixed
+- **Live reload is reliable immediately after startup.** `createServer` returned before the file watcher (chokidar) finished its initial scan, so a change made in the first moments after the server started could be dropped and never reach the browser. The server now waits for the watcher to be ready (capped so a slow scan can't block startup) before reporting itself ready. This also de-flakes the RF06 live-reload integration tests under parallel load.
+
 ## [0.7.1] - 2026-06-23
 
 ### Fixed
@@ -88,7 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Migration
 Existing `.annotations.yaml` files are upgraded automatically on first load. A `.bak` backup is saved alongside (e.g., `spec.md.annotations.yaml.bak`). To roll back, restore from the `.bak` file. Or run `npx mdprobe migrate <dir>` proactively.
 
-[Unreleased]: https://github.com/henryavila/mdprobe/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/henryavila/mdprobe/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/henryavila/mdprobe/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/henryavila/mdprobe/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/henryavila/mdprobe/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/henryavila/mdprobe/compare/v0.5.2...v0.6.0
