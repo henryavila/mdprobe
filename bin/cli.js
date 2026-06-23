@@ -69,7 +69,7 @@ Subcommands:
   migrate <path> [--dry-run]  Batch migrate v1 annotations to v2
   stop [--force] [--unexpose]
                          Kill singleton server and clean lock file
-  update [--yes] [--dry-run] [--force]
+  update [--yes] [--dry-run] [--force] [--no-prune]
                          Update mdProbe to the latest version
 `)
 }
@@ -173,6 +173,7 @@ async function main() {
       yes: hasFlag(args, '--yes', '-y'),
       dryRun: hasFlag(args, '--dry-run'),
       force: hasFlag(args, '--force'),
+      prune: !hasFlag(args, '--no-prune'),
     }
     const exitCode = await runUpdate(opts)
     process.exit(exitCode)

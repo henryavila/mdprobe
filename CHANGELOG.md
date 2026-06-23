@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - _Pending entries for the next release will be added here._
 
+## [0.7.0] - 2026-06-23
+
+### Added
+- **`mdprobe update` prunes stale duplicate installs.** After a successful upgrade, the updater scans `PATH` for every other global mdProbe install (across npm prefixes, a system `/usr` prefix, bun's global, …) and — with confirmation — removes every copy that is not the freshly-installed one, so the command you run is always the version you just installed. Each stale copy is removed with its owning package manager's uninstaller, prefix-scoped to that install; a permission-protected copy (e.g. a root-owned `/usr`) prints the exact `sudo` command instead of failing the update. `--yes` auto-confirms the removal; `--no-prune` opts out.
+
+### Fixed
+- **`mdprobe update` could install into the wrong package manager.** Detection picked the first package manager found on `PATH` (bun, pnpm, …) regardless of how mdProbe itself was installed, so a user with bun present but an npm-installed mdProbe would upgrade bun's global and leave the running npm binary stale. Detection now derives the package manager from the install location of the running binary, falling back to the previous `PATH` probe only when that location is inconclusive.
+- **Post-install verification reported a false version mismatch under bun.** `bun list -g … --json` ignores `--json` and prints a tree (`└── @henryavila/mdprobe@x.y.z`); the verifier could not parse it and warned `Found: (unknown)` even when the install had succeeded. It now also parses bun's tree output.
+
 ## [0.6.0] - 2026-06-17
 
 ### Added
@@ -74,7 +83,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Migration
 Existing `.annotations.yaml` files are upgraded automatically on first load. A `.bak` backup is saved alongside (e.g., `spec.md.annotations.yaml.bak`). To roll back, restore from the `.bak` file. Or run `npx mdprobe migrate <dir>` proactively.
 
-[Unreleased]: https://github.com/henryavila/mdprobe/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/henryavila/mdprobe/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/henryavila/mdprobe/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/henryavila/mdprobe/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/henryavila/mdprobe/releases/tag/v0.5.2
 [0.5.1]: https://github.com/henryavila/mdprobe/releases/tag/v0.5.1

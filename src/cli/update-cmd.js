@@ -49,6 +49,10 @@ import {
 } from '../package-manager.js'
 import { readChangelogSection as defaultReadChangelogSection } from '../changelog.js'
 import {
+  scanInstalls as defaultScanInstalls,
+  buildUninstallCommand,
+} from '../install-scan.js'
+import {
   readLockFile as defaultReadLockFile,
   removeLockFile as defaultRemoveLockFile,
   isProcessAlive as defaultIsProcessAlive,
@@ -101,7 +105,7 @@ const PKG_PATH = join(PROJECT_ROOT, 'package.json')
  * @returns {Promise<number>}
  */
 export async function runUpdate(opts = {}, deps = {}) {
-  const { yes = false, dryRun = false, force = false } = opts
+  const { yes = false, dryRun = false, force = false, prune = true } = opts
 
   const {
     fetch = globalThis.fetch,
@@ -116,6 +120,7 @@ export async function runUpdate(opts = {}, deps = {}) {
     detectPackageManager = defaultDetectPackageManager,
     detectGlobalRoot = defaultDetectGlobalRoot,
     readChangelogSection = defaultReadChangelogSection,
+    scanInstalls = defaultScanInstalls,
     pkg = readPkgSafe(),
     env = process.env,
     stdout = process.stdout,
@@ -263,11 +268,155 @@ export async function runUpdate(opts = {}, deps = {}) {
     stdout,
     readChangelogSection,
   })
+
+  // 12. Offer to remove other (stale) mdprobe installs so PATH resolves to the
+  //     freshly-installed one. Best-effort: never fails the update.
+  await reconcilePrune({
+    prune,
+    usedPm: pm,
+    latestVersion,
+    yes,
+    isTTY,
+    scanInstalls,
+    spawn,
+    confirm,
+    isCancel,
+    env,
+    stdout,
+    stderr,
+  })
+
   writeln(stdout, '')
   writeln(stdout, 'Start with: mdprobe')
 
   tel.log('success', { version: latestVersion })
   return 0
+}
+
+/**
+ * Detect other mdprobe installs on PATH and, with confirmation, remove every
+ * copy that is not the freshly-installed canonical one.
+ *
+ * Safety rules:
+ *   - Never removes anything unless the canonical install (matching the PM we
+ *     just used + the latest version) can be positively identified.
+ *   - Always prompts on a TTY; `--yes` auto-confirms; non-TTY without `--yes`
+ *     only lists + hints (no removal); `prune === false` disables entirely.
+ *   - Permission failures (e.g. a system `/usr` prefix) print the exact sudo
+ *     command instead of aborting.
+ */
+async function reconcilePrune({
+  prune,
+  usedPm,
+  latestVersion,
+  yes,
+  isTTY,
+  scanInstalls,
+  spawn,
+  confirm,
+  isCancel,
+  env,
+  stdout,
+  stderr,
+}) {
+  if (prune === false) return
+
+  let installs
+  try {
+    installs = scanInstalls({ env })
+  } catch (err) {
+    tel.log('error', { stage: 'prune-scan', message: err?.message })
+    return
+  }
+  if (!Array.isArray(installs) || installs.length <= 1) return
+
+  // Canonical = the install we just updated (matching PM + latest version),
+  // falling back to any install already at the latest version.
+  const canonical =
+    installs.find((i) => i.pm === usedPm && i.version === latestVersion) ||
+    installs.find((i) => i.version === latestVersion)
+  if (!canonical) {
+    tel.log('prune', { skipped: 'no-canonical', count: installs.length })
+    return
+  }
+
+  const stale = installs.filter((i) => i.pkgDir !== canonical.pkgDir)
+  if (stale.length === 0) return
+
+  // Can't prompt without a TTY (and `runUpdate` already requires `--yes` in
+  // that case). When unconfirmed, leave everything untouched.
+  if (!yes && !isTTY) return
+
+  writeln(stdout, '')
+  writeln(stdout, `Found ${stale.length} other mdprobe installation(s):`)
+  for (const i of stale) {
+    writeln(stdout, `  • ${i.version || '(unknown)'}  [${i.pm || 'unknown'}]  ${i.binPath}`)
+  }
+  writeln(stdout, `Keeping ${canonical.version} [${canonical.pm || 'unknown'}] at ${canonical.binPath}`)
+
+  if (!yes) {
+    const ok = await confirm({
+      message: `Remove these ${stale.length} old cop${stale.length === 1 ? 'y' : 'ies'} and keep only ${latestVersion}?`,
+      initialValue: true,
+    })
+    if (isCancel(ok) || !ok) {
+      writeln(stdout, 'Kept all installations.')
+      return
+    }
+  }
+
+  let removed = 0
+  for (const inst of stale) {
+    const plan = buildUninstallCommand(inst, env)
+    const res = await runUninstall({ spawn, plan })
+    if (res.ok) {
+      removed += 1
+      writeln(stdout, `  ✓ removed ${inst.version || '(unknown)'} [${inst.pm || 'unknown'}] ${inst.binPath}`)
+    } else if (res.permissionDenied) {
+      writeln(stderr, `  ! ${inst.binPath} needs elevated permissions`)
+      writeln(stderr, `    run: ${plan.sudoHint}`)
+    } else {
+      writeln(stderr, `  ✗ could not remove ${inst.binPath}${plan.manual ? ' (no package manager detected)' : ''}`)
+      if (plan.sudoHint) writeln(stderr, `    try: ${plan.sudoHint}`)
+    }
+  }
+  tel.log('prune', { stale: stale.length, removed })
+}
+
+/**
+ * Spawn one uninstall command. Best-effort; resolves a result object instead
+ * of throwing. `manual` plans (no resolvable PM) resolve as a non-permission
+ * failure so the caller prints the manual hint.
+ */
+function runUninstall({ spawn, plan }) {
+  return new Promise((resolvePromise) => {
+    if (plan.manual || !plan.cmd) {
+      resolvePromise({ ok: false, manual: true })
+      return
+    }
+    let stderrBuf = ''
+    let child
+    try {
+      child = spawn(plan.cmd, plan.args, { stdio: ['ignore', 'ignore', 'pipe'], env: plan.env })
+    } catch (err) {
+      resolvePromise({ ok: false, permissionDenied: isPermissionDeniedError(err, '') })
+      return
+    }
+    if (child?.stderr?.on) {
+      child.stderr.on('data', (chunk) => { stderrBuf += chunk.toString() })
+    }
+    child.on('error', (err) => {
+      resolvePromise({ ok: false, permissionDenied: isPermissionDeniedError(err, stderrBuf) })
+    })
+    child.on('close', (code) => {
+      const exitCode = typeof code === 'number' ? code : 0
+      if (exitCode === 0) {
+        resolvePromise({ ok: true })
+        return
+      }
+      resolvePromise({ ok: false, permissionDenied: isPermissionDeniedError(null, stderrBuf, exitCode) })
+    })
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -484,6 +633,10 @@ function extractInstalledVersion(jsonText, pkgName) {
   }
   const m = jsonText.match(new RegExp(`"${escapeForRegex(pkgName)}"\\s*[:,][^}]*"version"\\s*:\\s*"([^"]+)"`))
   if (m) return m[1]
+  // Final fallback: bun ignores `--json` for `bun list` and prints a tree
+  // ("└── @henryavila/mdprobe@0.6.0"). Match the literal "<pkg>@<version>" token.
+  const tree = jsonText.match(new RegExp(`${escapeForRegex(pkgName)}@([0-9][\\w.+-]*)`))
+  if (tree) return tree[1]
   return null
 }
 

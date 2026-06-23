@@ -121,6 +121,8 @@ function makeDeps(overrides = {}) {
     detectPackageManager: vi.fn(() => 'npm'),
     detectGlobalRoot: vi.fn(() => '/fake/global/node_modules'),
     readChangelogSection: vi.fn(() => null),
+    // Default: no duplicate installs (keeps existing tests off the real disk).
+    scanInstalls: vi.fn(() => []),
     pkg: PKG,
     env: { NODE_ENV: 'test' },
     stdout: makeWriter(),
@@ -460,6 +462,42 @@ describe('runUpdate — error mapping', () => {
     expect(deps.stderr.text).toMatch(/manual install|install failed/i)
   })
 
+  it('bun verify: tree-format `list` output is parsed (no false mismatch)', async () => {
+    // Regression: `bun list -g <pkg> --json` ignores --json and prints a tree
+    // ("└── @henryavila/mdprobe@0.5.1"). The verify step must parse that and
+    // NOT report a "(unknown)" version mismatch when the install succeeded.
+    const calls = []
+    const treeSpawn = vi.fn((cmd, args, runOpts) => {
+      calls.push({ cmd, args, opts: runOpts })
+      const child = new EventEmitter()
+      child.stdout = new EventEmitter()
+      child.stderr = new EventEmitter()
+      child.kill = () => {}
+      const isList = Array.isArray(args) && args.includes('list')
+      setImmediate(() => {
+        if (isList) {
+          const tree = '/home/user/.bun/install/global node_modules (267)\n'
+            + '└── @henryavila/mdprobe@0.5.1\n'
+          child.stdout.emit('data', Buffer.from(tree))
+          child.emit('close', 0)
+        } else {
+          child.emit('close', 0)
+        }
+      })
+      return child
+    })
+    treeSpawn.calls = calls
+    const deps = makeDeps({
+      detectPackageManager: vi.fn(() => 'bun'),
+      spawn: treeSpawn,
+    })
+    const code = await runUpdate({ yes: true }, deps)
+    expect(code).toBe(0)
+    const out = deps.stdout.text + deps.stderr.text
+    expect(out).toMatch(/Updated mdprobe to 0\.5\.1/)
+    expect(out).not.toMatch(/mismatch|unknown/i)
+  })
+
   it('post-install version mismatch → warn, exit 1', async () => {
     const deps = makeDeps({
       spawn: makeFakeSpawn({ installedVersion: '0.4.9' }),
@@ -533,5 +571,138 @@ describe('runUpdate — output formatting', () => {
     expect(out).toMatch(/0\.5\.0\s*→\s*0\.5\.1/)
     expect(out).toMatch(/Manager:\s*npm/)
     expect(out).toMatch(/https:\/\/github\.com\/henryavila\/mdprobe\/releases\/tag\/v0\.5\.1/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Step 5.5 — Duplicate-install pruning
+// ---------------------------------------------------------------------------
+
+/** Build a fake install record (the shape scanInstalls returns). */
+function inst({ pm, version, prefix = '/x', binDir = '/x/bin', pkgDir, binPath }) {
+  return {
+    pm,
+    version,
+    prefix,
+    binDir,
+    pkgDir: pkgDir ?? `/pkg/${pm}-${version}`,
+    binPath: binPath ?? `${binDir}/mdprobe`,
+  }
+}
+
+const CANONICAL = inst({ pm: 'npm', version: '0.5.1', prefix: '/home/u/.npm-global', binDir: '/home/u/.npm-global/bin' })
+const STALE_BUN = inst({ pm: 'bun', version: '0.5.0', binDir: '/home/u/.bun/bin' })
+const STALE_USR = inst({ pm: 'npm', version: '0.4.0', prefix: '/usr', binDir: '/usr/bin' })
+
+const rmCalls = (spawn) => spawn.calls.filter((c) => Array.isArray(c.args) && c.args.includes('rm'))
+
+describe('runUpdate — duplicate-install pruning', () => {
+  it('removes stale installs after a successful update (--yes auto-confirms)', async () => {
+    const deps = makeDeps({
+      scanInstalls: vi.fn(() => [CANONICAL, STALE_BUN, STALE_USR]),
+    })
+    const code = await runUpdate({ yes: true }, deps)
+    expect(code).toBe(0)
+    const out = deps.stdout.text + deps.stderr.text
+    expect(out).toMatch(/Found 2 other mdprobe installation/)
+    expect(out).toMatch(/removed 0\.5\.0 \[bun\]/)
+    expect(out).toMatch(/removed 0\.4\.0 \[npm\]/)
+    // Keeping line names the canonical install only.
+    expect(out).toMatch(/Keeping 0\.5\.1 \[npm\]/)
+    // Two uninstall spawns (not the canonical).
+    expect(rmCalls(deps.spawn)).toHaveLength(2)
+    // The npm uninstall is prefix-scoped to the stale install.
+    const npmRm = rmCalls(deps.spawn).find((c) => c.cmd === 'npm')
+    expect(npmRm.opts.env.npm_config_prefix).toBe('/usr')
+    // The bun uninstall carries the derived BUN_INSTALL.
+    const bunRm = rmCalls(deps.spawn).find((c) => c.cmd === 'bun')
+    expect(bunRm.opts.env.BUN_INSTALL).toBe('/home/u/.bun')
+  })
+
+  it('--no-prune leaves duplicates untouched', async () => {
+    const deps = makeDeps({
+      scanInstalls: vi.fn(() => [CANONICAL, STALE_BUN, STALE_USR]),
+    })
+    const code = await runUpdate({ yes: true, prune: false }, deps)
+    expect(code).toBe(0)
+    const out = deps.stdout.text + deps.stderr.text
+    expect(out).not.toMatch(/other mdprobe installation/)
+    expect(rmCalls(deps.spawn)).toHaveLength(0)
+  })
+
+  it('does nothing when only one install exists', async () => {
+    const deps = makeDeps({
+      scanInstalls: vi.fn(() => [CANONICAL]),
+    })
+    const code = await runUpdate({ yes: true }, deps)
+    expect(code).toBe(0)
+    expect(deps.stdout.text).not.toMatch(/other mdprobe installation/)
+    expect(rmCalls(deps.spawn)).toHaveLength(0)
+  })
+
+  it('user declines the prune prompt → keeps all installs', async () => {
+    const deps = makeDeps({
+      scanInstalls: vi.fn(() => [CANONICAL, STALE_BUN]),
+      // 1st confirm = proceed with update; 2nd confirm = decline prune.
+      confirm: vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false),
+    })
+    deps.stdout.isTTY = true
+    const code = await runUpdate({}, deps)
+    expect(code).toBe(0)
+    expect(deps.stdout.text).toMatch(/Kept all installations/)
+    expect(rmCalls(deps.spawn)).toHaveLength(0)
+  })
+
+  it('never prunes when the canonical (latest) install cannot be identified', async () => {
+    // No install is at the latest version → we cannot tell what to keep.
+    const deps = makeDeps({
+      scanInstalls: vi.fn(() => [
+        inst({ pm: 'npm', version: '0.5.0', binDir: '/a/bin' }),
+        inst({ pm: 'bun', version: '0.4.0', binDir: '/b/bin' }),
+      ]),
+    })
+    const code = await runUpdate({ yes: true }, deps)
+    expect(code).toBe(0)
+    expect(deps.stdout.text).not.toMatch(/other mdprobe installation/)
+    expect(rmCalls(deps.spawn)).toHaveLength(0)
+  })
+
+  it('permission error on one install prints the sudo hint and continues', async () => {
+    // install + verify succeed; the /usr npm uninstall hits EACCES; bun succeeds.
+    const calls = []
+    const spawn = vi.fn((cmd, args, runOpts) => {
+      calls.push({ cmd, args, opts: runOpts })
+      const child = new EventEmitter()
+      child.stdout = new EventEmitter()
+      child.stderr = new EventEmitter()
+      child.kill = () => {}
+      setImmediate(() => {
+        if (Array.isArray(args) && args.includes('list')) {
+          child.stdout.emit('data', Buffer.from(JSON.stringify({
+            dependencies: { '@henryavila/mdprobe': { version: '0.5.1' } },
+          })))
+          child.emit('close', 0)
+        } else if (cmd === 'npm' && args.includes('rm')) {
+          child.stderr.emit('data', Buffer.from('npm error code EACCES\nEACCES: permission denied'))
+          child.emit('close', 243)
+        } else {
+          child.emit('close', 0) // install + bun rm
+        }
+      })
+      return child
+    })
+    spawn.calls = calls
+    const deps = makeDeps({
+      spawn,
+      scanInstalls: vi.fn(() => [CANONICAL, STALE_USR, STALE_BUN]),
+    })
+    const code = await runUpdate({ yes: true }, deps)
+    // Update itself still succeeds — a prune permission error is not fatal.
+    expect(code).toBe(0)
+    const out = deps.stdout.text + deps.stderr.text
+    expect(out).toMatch(/needs elevated permissions/)
+    expect(out).toMatch(/sudo npm rm -g @henryavila\/mdprobe --prefix \/usr/)
+    // The bun copy was still removed despite the npm failure.
+    expect(out).toMatch(/removed 0\.5\.0 \[bun\]/)
   })
 })
