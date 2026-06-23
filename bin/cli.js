@@ -8,7 +8,7 @@ import { getConfig, setConfig, getAuthor } from '../src/config.js'
 import { AnnotationFile } from '../src/annotations.js'
 import { exportReport, exportInline, exportJSON, exportSARIF } from '../src/export.js'
 import { createServer as createMdprobeServer } from '../src/server.js'
-import { findMarkdownFiles, extractFlag, hasFlag } from '../src/cli-utils.js'
+import { findMarkdownFiles, extractFlag, hasFlag, looksLikeStrayCommand, unknownCommandMessage } from '../src/cli-utils.js'
 import { openBrowser } from '../src/open-browser.js'
 import { discoverExistingServer, joinExistingServer, writeLockFile, readLockFile, registerShutdownHandlers } from '../src/singleton.js'
 import { createLogger, getParentCmd } from '../src/telemetry.js'
@@ -423,6 +423,11 @@ async function main() {
       const resolved = resolve(target)
 
       if (!existsSync(resolved)) {
+        // A bare command-like first arg (e.g. `mdprobe install`) was forwarded
+        // as a filename. Guide the user instead of "install does not exist".
+        if (target === targets[0] && looksLikeStrayCommand(target)) {
+          fatal(unknownCommandMessage(target))
+        }
         fatal(`Error: ${target} does not exist`)
       }
 

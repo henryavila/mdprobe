@@ -489,6 +489,17 @@ describe('Error cases', () => {
     const output = result.stdout + result.stderr
     expect(output).toMatch(/no markdown files found/i)
   })
+
+  it('unknown command (`mdprobe install`) gives guidance, not "does not exist"', async () => {
+    const result = await run(['install'])
+    expect(result.code).not.toBe(0)
+    const output = result.stdout + result.stderr
+    expect(output).toMatch(/'install' is not a file or a mdprobe command/)
+    expect(output).toMatch(/installed via npm\/npx/)
+    expect(output).toMatch(/mdprobe setup/)
+    // The old cryptic phrasing must not be what the user sees.
+    expect(output).not.toMatch(/install does not exist/)
+  })
 })
 
 // ---------------------------------------------------------------------------
