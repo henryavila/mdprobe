@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- _Pending entries for the next release will be added here._
+- **Copy / view raw markdown source.** A new **Copy .md** button in the header copies the active file's original, unannotated markdown to the clipboard in one click (with a ✓ confirmation), and a **Raw Markdown (.md)** entry in the Export menu opens the raw source in a new tab. Both are backed by the existing `GET /api/source` endpoint — useful for grabbing a reviewed briefing's raw markdown to paste into an agent.
 
 ## [0.5.2] - 2026-05-26
 

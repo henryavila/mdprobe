@@ -4,6 +4,15 @@ import { currentFile } from '../state/store.js'
 export function ExportMenu() {
   const [open, setOpen] = useState(false)
 
+  function handleViewSource() {
+    setOpen(false)
+    const file = currentFile.value
+    if (!file) return
+    // /api/source serves the raw .md as text/plain, so the browser renders it
+    // inline as text. Open the live URL directly (no blob needed).
+    window.open(`/api/source?path=${encodeURIComponent(file)}`, '_blank')
+  }
+
   async function handleExport(format) {
     setOpen(false)
     const file = currentFile.value
@@ -42,6 +51,9 @@ export function ExportMenu() {
         <>
           <div style="position: fixed; inset: 0; z-index: 90" onClick={() => setOpen(false)} />
           <div style="position: absolute; right: 0; top: 100%; margin-top: 4px; z-index: 100; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 180px; overflow: hidden">
+            <button class="export-option" onClick={handleViewSource}>
+              Raw Markdown (.md)
+            </button>
             <button class="export-option" onClick={() => handleExport('report')}>
               Review Report (.md)
             </button>

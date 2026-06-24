@@ -18,6 +18,7 @@ import { RightPanel } from './components/RightPanel.jsx'
 import { Content } from './components/Content.jsx'
 import { ThemePicker } from './components/ThemePicker.jsx'
 import { ExportMenu } from './components/ExportMenu.jsx'
+import { CopySource } from './components/CopySource.jsx'
 import { AnnotationModal } from './components/AnnotationModal.jsx'
 import './styles/themes.css'
 
@@ -127,6 +128,7 @@ function App() {
             </div>
           </div>
         )}
+        <CopySource />
         <ExportMenu />
         <ThemePicker themes={themes} onSelect={setTheme} />
         {reviewMode.value && <button class="btn btn-primary btn-sm" onClick={async () => {
